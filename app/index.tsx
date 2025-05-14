@@ -1,21 +1,37 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import ApiKeyInput from './components/ApiKeyInput';
+import ErrorMessage from './components/ErrorMessage';
+import { UpApiError, validateApiKey } from './services/upApi';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
 
   const handleApiKeySubmit = async (apiKey: string) => {
     setIsLoading(true);
-    // We'll implement the actual API validation in Story 1.3
-    console.log('API Key submitted:', apiKey);
-    // For now, just simulate a delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsLoading(false);
+    setError('');
+
+    try {
+      const isValid = await validateApiKey(apiKey);
+      if (isValid) {
+        // We'll handle successful validation in Story 1.4
+        console.log('API key is valid!');
+      }
+    } catch (err) {
+      if (err instanceof UpApiError) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
+      <ErrorMessage message={error} />
       <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
     </View>
   );
