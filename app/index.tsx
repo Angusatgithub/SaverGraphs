@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import ApiKeyInput from './components/ApiKeyInput';
+import DebugPanel from './components/DebugPanel';
 import ErrorMessage from './components/ErrorMessage';
 import SuccessMessage from './components/SuccessMessage';
 import { storeApiKey } from './services/storage';
@@ -45,6 +46,7 @@ export default function App() {
       <ErrorMessage message={error} />
       <SuccessMessage message={success} onComplete={handleSuccessComplete} />
       <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
+      <DebugPanel />
     </View>
   );
 }
