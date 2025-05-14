@@ -180,5 +180,5 @@ alwaysApply: true
 ## Cursor Agent Specific
 
 - **Update task log**
-  - After completing each task, the Cursor agent updates the `.cursor/updates.md` file with a short note about what it just did and how.
+  - After completing each task, the update the `.cursor/updates.md` file with a short note about what it just did and how.
 
