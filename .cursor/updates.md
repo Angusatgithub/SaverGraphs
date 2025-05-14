@@ -119,3 +119,17 @@ alwaysApply: false
 ### Testing
 - Verified that entering a valid key and relaunching the app skips the input screen and goes straight to the dashboard.
 - Verified that an invalid or missing key shows the input screen as expected.
+
+## May 15, 2024 - Fetch and Display Accounts (Story 2.1)
+
+### Fetch List of Accounts
+- Implemented Up API integration to fetch all user accounts after login or auto-login.
+- Added new service function to call the `/accounts` endpoint and parse the response.
+
+### Display in Dashboard
+- Updated dashboard to display each account's display name, type, and balance.
+- Fixed bug: now uses `displayName` (not `name`) for account names, per Up API docs.
+- Improved dashboard UI for account listing.
+
+### Testing
+- Verified that accounts are fetched and displayed with correct names, types, and balances after login.

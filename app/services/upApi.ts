@@ -82,4 +82,37 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
     }
     throw new UpApiError(500, 'Failed to connect to Up API');
   }
+}
+
+export interface UpAccount {
+  id: string;
+  attributes: {
+    displayName: string;
+    accountType: string;
+    balance: {
+      value: string;
+      currencyCode: string;
+    };
+  };
+}
+
+export async function fetchAccounts(apiKey: string): Promise<UpAccount[]> {
+  const cleanKey = apiKey.trim().replace(/\s+/g, '');
+  const response = await fetch(`${UP_API_BASE_URL}/accounts`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${cleanKey}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.log('Error fetching accounts:', errorText);
+    throw new UpApiError(response.status, 'Failed to fetch accounts');
+  }
+
+  const data = await response.json();
+  // Up API returns accounts in data array
+  return data.data as UpAccount[];
 } 

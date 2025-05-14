@@ -1,17 +1,19 @@
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import ApiKeyInput from './components/ApiKeyInput';
 import DebugPanel from './components/DebugPanel';
 import ErrorMessage from './components/ErrorMessage';
 import SuccessMessage from './components/SuccessMessage';
+import Dashboard from './dashboard';
 import { getStoredApiKey, storeApiKey } from './services/storage';
-import { UpApiError, validateApiKey } from './services/upApi';
+import { fetchAccounts, UpAccount, UpApiError, validateApiKey } from './services/upApi';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true); // Start loading immediately
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [accounts, setAccounts] = useState<UpAccount[] | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
 
   // On mount, check for stored API key
   useEffect(() => {
@@ -20,7 +22,10 @@ export default function App() {
         const storedKey = await getStoredApiKey();
         if (storedKey) {
           await validateApiKey(storedKey);
-          router.replace('/dashboard');
+          setApiKey(storedKey);
+          const fetchedAccounts = await fetchAccounts(storedKey);
+          setAccounts(fetchedAccounts);
+          setIsLoading(false);
           return;
         }
       } catch (err) {
@@ -32,15 +37,18 @@ export default function App() {
     checkStoredKey();
   }, []);
 
-  const handleApiKeySubmit = async (apiKey: string) => {
+  const handleApiKeySubmit = async (inputKey: string) => {
     setIsLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      await validateApiKey(apiKey); // If this doesn't throw, it's valid
-      await storeApiKey(apiKey);
+      await validateApiKey(inputKey); // If this doesn't throw, it's valid
+      await storeApiKey(inputKey);
       setSuccess('API key validated successfully!');
+      setApiKey(inputKey);
+      const fetchedAccounts = await fetchAccounts(inputKey);
+      setAccounts(fetchedAccounts);
     } catch (err) {
       if (err instanceof UpApiError) {
         setError(err.message);
@@ -52,17 +60,19 @@ export default function App() {
     }
   };
 
+  // After success animation, show dashboard if accounts are loaded
   const handleSuccessComplete = () => {
-    // Navigate to the main app screen
-    router.replace('/dashboard');
+    // No navigation, just show dashboard in place
   };
 
   return (
     <View style={styles.container}>
       <ErrorMessage message={error} />
       <SuccessMessage message={success} onComplete={handleSuccessComplete} />
-      {!isLoading && (
-        <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
+      {accounts ? (
+        <Dashboard accounts={accounts} />
+      ) : (
+        !isLoading && <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
       )}
       <DebugPanel />
     </View>
