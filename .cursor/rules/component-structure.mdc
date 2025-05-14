@@ -1,0 +1,48 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Component Structure and Organization
+
+## Directory Structure
+- All components must be placed in the `components` directory
+- Each component should be in its own file with `.tsx` extension
+- Route-based components should be placed in the `app` directory
+
+## Component Guidelines
+- Use TypeScript for all components
+- Export components as default exports
+- Follow naming convention: PascalCase for component names
+- Component file name should match the component name
+
+## Example Structure
+```
+components/
+  └── MyComponent.tsx
+app/
+  ├── _layout.tsx
+  └── index.tsx
+```
+
+## Component Template
+Components should follow this basic structure:
+```typescript
+import { View } from 'react-native';
+
+interface MyComponentProps {
+  // Define props here
+}
+
+export default function MyComponent({ ...props }: MyComponentProps) {
+  return (
+    <View>
+      {/* Component content */}
+    </View>
+  );
+}
+```
+
+## References
+- Main layout configuration: [app/_layout.tsx](mdc:app/_layout.tsx)
+- Example component: [app/index.tsx](mdc:app/index.tsx)

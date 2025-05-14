@@ -1,0 +1,61 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# TypeScript and Code Quality Standards
+
+## TypeScript Guidelines
+- Follow configuration in [tsconfig.json](mdc:tsconfig.json)
+- Always use explicit type annotations for component props
+- Avoid using `any` type - use proper type definitions
+- Use interfaces for complex object types
+- Enable strict type checking
+
+## Code Organization
+- Keep files under 300-400 lines
+- Extract reusable logic into utility functions
+- Group related functionality together
+- Use meaningful variable and function names
+
+## Best Practices
+- Implement proper error handling with try/catch
+- Use async/await for asynchronous operations
+- Add TypeDoc comments for complex functions
+- Follow DRY (Don't Repeat Yourself) principle
+
+## Type Definitions Example
+```typescript
+// Prefer interfaces for object types
+interface UserData {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Use type for unions/intersections
+type Status = 'pending' | 'success' | 'error';
+
+// Generic type example
+interface ApiResponse<T> {
+  data: T;
+  status: Status;
+  timestamp: number;
+}
+```
+
+## Error Handling Example
+```typescript
+async function fetchData<T>(url: string): Promise<ApiResponse<T>> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to fetch data:', error);
+    throw error;
+  }
+}
+```

@@ -1,0 +1,65 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Security Best Practices
+
+## Input Validation and Sanitization
+- Validate all user inputs on both client and server sides
+- Sanitize data before rendering to prevent XSS attacks
+- Use parameterized queries for database operations
+- Never trust client-side data
+
+## Authentication & Authorization
+- Protect sensitive routes with authentication middleware
+- Implement proper role-based access control
+- Use secure session management
+- Never store sensitive data in client-side storage
+
+## API Security
+- Implement rate limiting for API endpoints
+- Use HTTPS for all connections
+- Set secure HTTP headers (CORS, CSP)
+- Validate request origins
+
+## Environment Variables
+```typescript
+// DON'T - Never hardcode secrets
+const apiKey = "1234567890";
+
+// DO - Use environment variables
+const apiKey = process.env.API_KEY;
+if (!apiKey) {
+  throw new Error("API key is required");
+}
+```
+
+## XSS Prevention Example
+```typescript
+// DON'T - Unsafe rendering
+<div dangerouslySetInnerHTML={{ __html: userInput }} />
+
+// DO - Safe text rendering
+<Text>{sanitizeText(userInput)}</Text>
+```
+
+## Authentication Example
+```typescript
+// Protect routes with authentication
+export function withAuth(Component: React.ComponentType) {
+  return function AuthenticatedComponent(props: any) {
+    const { isAuthenticated, loading } = useAuth();
+    
+    if (loading) {
+      return <LoadingSpinner />;
+    }
+    
+    if (!isAuthenticated) {
+      return <Redirect to="/login" />;
+    }
+    
+    return <Component {...props} />;
+  };
+}
+```

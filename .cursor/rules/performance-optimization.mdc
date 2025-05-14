@@ -1,0 +1,72 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Performance Optimization Guidelines
+
+## React Performance
+- Use React.memo() for expensive components
+- Implement useMemo() for costly computations
+- Use useCallback() for function props
+- Avoid unnecessary re-renders
+
+## Resource Management
+- Clean up event listeners in useEffect
+- Cancel pending requests on component unmount
+- Clear intervals and timeouts when not needed
+- Implement proper memory management
+
+## Data Loading and State
+- Implement pagination for large datasets
+- Use proper caching strategies
+- Optimize images and assets
+- Implement lazy loading for routes
+
+## Example: Proper Cleanup
+```typescript
+function MyComponent() {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Some operation
+    }, 1000);
+
+    // Cleanup function
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+}
+```
+
+## Example: Memoization
+```typescript
+// Memoize expensive calculations
+const memoizedValue = useMemo(() => {
+  return expensiveCalculation(prop1, prop2);
+}, [prop1, prop2]);
+
+// Memoize callback functions
+const memoizedCallback = useCallback(() => {
+  doSomething(prop1, prop2);
+}, [prop1, prop2]);
+
+// Memoize component
+const MemoizedComponent = React.memo(function MyComponent(props) {
+  return <View>{/* Component content */}</View>;
+});
+```
+
+## Example: Lazy Loading
+```typescript
+// Lazy load components
+const LazyComponent = React.lazy(() => import('./LazyComponent'));
+
+function App() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+```
