@@ -24,7 +24,10 @@ export default function App() {
           await validateApiKey(storedKey);
           setApiKey(storedKey);
           const fetchedAccounts = await fetchAccounts(storedKey);
-          setAccounts(fetchedAccounts);
+          const saverAccounts = fetchedAccounts.filter(
+            (acct) => acct.attributes.accountType === 'SAVER'
+          );
+          setAccounts(saverAccounts);
           setIsLoading(false);
           return;
         }
@@ -48,7 +51,10 @@ export default function App() {
       setSuccess('API key validated successfully!');
       setApiKey(inputKey);
       const fetchedAccounts = await fetchAccounts(inputKey);
-      setAccounts(fetchedAccounts);
+      const saverAccounts = fetchedAccounts.filter(
+        (acct) => acct.attributes.accountType === 'SAVER'
+      );
+      setAccounts(saverAccounts);
     } catch (err) {
       if (err instanceof UpApiError) {
         setError(err.message);

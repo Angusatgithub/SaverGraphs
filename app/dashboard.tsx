@@ -9,7 +9,7 @@ interface DashboardProps {
 export default function Dashboard({ accounts }: DashboardProps) {
   return (
     <View style={styles.container}>
-      <ThemedText style={styles.title}>Your Accounts</ThemedText>
+      <ThemedText style={styles.title}>Your Savings Accounts</ThemedText>
       <ScrollView style={styles.scrollView}>
         {accounts.map((account) => (
           <View key={account.id} style={styles.accountItem}>

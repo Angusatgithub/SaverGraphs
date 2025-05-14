@@ -133,3 +133,15 @@ alwaysApply: false
 
 ### Testing
 - Verified that accounts are fetched and displayed with correct names, types, and balances after login.
+
+## May 15, 2024 - Filter and Display Savings Accounts (Story 2.2)
+
+### Filter for SAVER Accounts
+- Updated logic to filter fetched accounts and only include those with `accountType === 'SAVER'` (savings accounts).
+- Only savings accounts are now passed to and displayed in the dashboard.
+
+### Dashboard Update
+- Changed dashboard title to "Your Savings Accounts" for clarity.
+
+### Testing
+- Verified that only savings accounts are shown after login, and other account types are excluded from the dashboard list.
