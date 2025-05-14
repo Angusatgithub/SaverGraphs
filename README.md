@@ -22,7 +22,7 @@ A React Native mobile app that visualizes your Up Bank savings through beautiful
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/[your-username]/SaverGraphs.git
+git clone https://github.com/Angusatgithub/SaverGraphs.git
 cd SaverGraphs
 ```
 
