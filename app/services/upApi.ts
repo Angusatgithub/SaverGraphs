@@ -115,4 +115,38 @@ export async function fetchAccounts(apiKey: string): Promise<UpAccount[]> {
   const data = await response.json();
   // Up API returns accounts in data array
   return data.data as UpAccount[];
+}
+
+export interface UpTransaction {
+  id: string;
+  attributes: {
+    description: string;
+    amount: {
+      value: string;
+      currencyCode: string;
+    };
+    createdAt: string;
+    // Add more fields as needed
+  };
+}
+
+export async function fetchRecentTransactions(apiKey: string, accountId: string): Promise<UpTransaction[]> {
+  const cleanKey = apiKey.trim().replace(/\s+/g, '');
+  // Calculate date 90 days ago
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const url = `${UP_API_BASE_URL}/accounts/${accountId}/transactions?filter[since]=${since}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${cleanKey}`,
+      'Accept': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.log('Error fetching transactions:', errorText);
+    throw new UpApiError(response.status, 'Failed to fetch transactions');
+  }
+  const data = await response.json();
+  return data.data as UpTransaction[];
 } 

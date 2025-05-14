@@ -4,9 +4,10 @@ import { UpAccount } from './services/upApi';
 
 interface DashboardProps {
   accounts: UpAccount[];
+  transactionSummary: Record<string, number>;
 }
 
-export default function Dashboard({ accounts }: DashboardProps) {
+export default function Dashboard({ accounts, transactionSummary }: DashboardProps) {
   return (
     <View style={styles.container}>
       <ThemedText style={styles.title}>Your Savings Accounts</ThemedText>
@@ -17,6 +18,9 @@ export default function Dashboard({ accounts }: DashboardProps) {
             <ThemedText style={styles.accountType}>{account.attributes.accountType}</ThemedText>
             <ThemedText style={styles.accountBalance}>
               {account.attributes.balance.value} {account.attributes.balance.currencyCode}
+            </ThemedText>
+            <ThemedText style={styles.transactionCount}>
+              Transactions (last 90 days): {transactionSummary[account.id] ?? 0}
             </ThemedText>
           </View>
         ))}
@@ -63,5 +67,10 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     marginTop: 6,
     fontWeight: 'bold',
+  },
+  transactionCount: {
+    fontSize: 14,
+    color: '#FFD700',
+    marginTop: 8,
   },
 }); 

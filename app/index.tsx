@@ -6,7 +6,7 @@ import ErrorMessage from './components/ErrorMessage';
 import SuccessMessage from './components/SuccessMessage';
 import Dashboard from './dashboard';
 import { getStoredApiKey, storeApiKey } from './services/storage';
-import { fetchAccounts, UpAccount, UpApiError, validateApiKey } from './services/upApi';
+import { fetchAccounts, fetchRecentTransactions, UpAccount, UpApiError, validateApiKey } from './services/upApi';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true); // Start loading immediately
@@ -14,6 +14,7 @@ export default function App() {
   const [success, setSuccess] = useState<string>('');
   const [accounts, setAccounts] = useState<UpAccount[] | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [transactionSummary, setTransactionSummary] = useState<Record<string, number>>({});
 
   // On mount, check for stored API key
   useEffect(() => {
@@ -28,6 +29,13 @@ export default function App() {
             (acct) => acct.attributes.accountType === 'SAVER'
           );
           setAccounts(saverAccounts);
+          // Fetch transactions for each account
+          const summary: Record<string, number> = {};
+          for (const acct of saverAccounts) {
+            const txns = await fetchRecentTransactions(storedKey, acct.id);
+            summary[acct.id] = txns.length;
+          }
+          setTransactionSummary(summary);
           setIsLoading(false);
           return;
         }
@@ -55,6 +63,13 @@ export default function App() {
         (acct) => acct.attributes.accountType === 'SAVER'
       );
       setAccounts(saverAccounts);
+      // Fetch transactions for each account
+      const summary: Record<string, number> = {};
+      for (const acct of saverAccounts) {
+        const txns = await fetchRecentTransactions(inputKey, acct.id);
+        summary[acct.id] = txns.length;
+      }
+      setTransactionSummary(summary);
     } catch (err) {
       if (err instanceof UpApiError) {
         setError(err.message);
@@ -76,7 +91,7 @@ export default function App() {
       <ErrorMessage message={error} />
       <SuccessMessage message={success} onComplete={handleSuccessComplete} />
       {accounts ? (
-        <Dashboard accounts={accounts} />
+        <Dashboard accounts={accounts} transactionSummary={transactionSummary} />
       ) : (
         !isLoading && <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
       )}

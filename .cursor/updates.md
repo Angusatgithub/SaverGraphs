@@ -145,3 +145,15 @@ alwaysApply: false
 
 ### Testing
 - Verified that only savings accounts are shown after login, and other account types are excluded from the dashboard list.
+
+## May 15, 2024 - Fetch and Summarize Transactions (Story 2.3)
+
+### Fetch Recent Transactions
+- Implemented service function to fetch recent transactions (last 90 days) for each SAVER (savings) account from the Up API.
+- After fetching accounts, the app now fetches transactions for each and stores a summary (count per account) in state.
+
+### Dashboard Update
+- Dashboard now displays the number of transactions (last 90 days) for each savings account.
+
+### Testing
+- Verified that transaction counts are fetched and displayed for each savings account after login.
