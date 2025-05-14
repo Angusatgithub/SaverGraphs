@@ -106,3 +106,16 @@ alwaysApply: false
 
 ### Next Steps
 - Proceed to implement Story 1.5: Display API Key Validation Failure with more granular error messages and retry options.
+
+## May 15, 2024 - Auto-Login with Stored API Key (Story 1.7)
+
+### Retrieve and Validate API Key on Launch
+- On app launch, the app now checks for a stored API key using SecureStore.
+- If a key is found, it is validated with the Up API ping endpoint.
+- If valid, the user is automatically navigated to the dashboard, skipping the API key input screen.
+- If not found or invalid, the API key input screen is shown as usual.
+- Loading state is shown while checking for a stored key to prevent UI flicker.
+
+### Testing
+- Verified that entering a valid key and relaunching the app skips the input screen and goes straight to the dashboard.
+- Verified that an invalid or missing key shows the input screen as expected.

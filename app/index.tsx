@@ -1,17 +1,36 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import ApiKeyInput from './components/ApiKeyInput';
 import DebugPanel from './components/DebugPanel';
 import ErrorMessage from './components/ErrorMessage';
 import SuccessMessage from './components/SuccessMessage';
-import { storeApiKey } from './services/storage';
+import { getStoredApiKey, storeApiKey } from './services/storage';
 import { UpApiError, validateApiKey } from './services/upApi';
 
 export default function App() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start loading immediately
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+
+  // On mount, check for stored API key
+  useEffect(() => {
+    const checkStoredKey = async () => {
+      try {
+        const storedKey = await getStoredApiKey();
+        if (storedKey) {
+          await validateApiKey(storedKey);
+          router.replace('/dashboard');
+          return;
+        }
+      } catch (err) {
+        // If invalid or error, just show input (do not set error here)
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkStoredKey();
+  }, []);
 
   const handleApiKeySubmit = async (apiKey: string) => {
     setIsLoading(true);
@@ -35,7 +54,6 @@ export default function App() {
 
   const handleSuccessComplete = () => {
     // Navigate to the main app screen
-    // We'll implement this screen in future stories
     router.replace('/dashboard');
   };
 
@@ -43,7 +61,9 @@ export default function App() {
     <View style={styles.container}>
       <ErrorMessage message={error} />
       <SuccessMessage message={success} onComplete={handleSuccessComplete} />
-      <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
+      {!isLoading && (
+        <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
+      )}
       <DebugPanel />
     </View>
   );
