@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Project Updates
 
-## May 14, 2024 - Initial Setup and Story 1.1
+## May 14, 2024 - Initial Setup and Stories 1.1-1.3
 
 ### Project Structure Setup
 - Initialized React Native project with Expo and TypeScript
@@ -23,6 +23,31 @@ alwaysApply: false
 - Updated main app screen to display the API key input
 - Configured proper layout with dark theme and status bar settings
 
+### Story 1.2: Implement API Key Submission
+- Enhanced `ApiKeyInput` component with:
+  - Added submit button with proper styling
+  - Implemented loading state handling
+  - Added button state management (disabled, pressed)
+- Updated main app screen with:
+  - Added API key submission handler
+  - Implemented loading state management
+  - Added placeholder for API validation
+- Fixed component export issues:
+  - Updated `ThemedText` to use default export
+  - Fixed import statements accordingly
+
+### Story 1.3: Validate API Key via Ping Utility
+- Created Up API service with:
+  - Implemented ping utility endpoint integration
+  - Added proper error handling with custom `UpApiError` class
+  - Added type-safe response handling
+- Created `ErrorMessage` component for displaying validation errors
+- Enhanced main app screen with:
+  - Integrated API key validation
+  - Added error state management
+  - Implemented proper error display
+  - Added success state placeholder (for Story 1.4)
+
 ### Repository Setup
 - Created comprehensive README.md with:
   - Project description
@@ -34,19 +59,6 @@ alwaysApply: false
 - Set up GitHub repository at https://github.com/Angusatgithub/SaverGraphs
 - Pushed initial codebase to GitHub
 
-### Story 1.2: Implement API Key Submission
-- Enhanced `ApiKeyInput` component with:
-  - Added submit button with proper styling
-  - Implemented loading state handling
-  - Added button state management (disabled, pressed)
-- Updated main app screen with:
-  - Added API key submission handler
-  - Implemented loading state management
-  - Added placeholder for API validation (to be implemented in Story 1.3)
-- Fixed component export issues:
-  - Updated `ThemedText` to use default export
-  - Fixed import statements accordingly
-
 ### Code Organization
 - Following component structure guidelines:
   - Components in dedicated directory
@@ -54,8 +66,9 @@ alwaysApply: false
   - Proper file naming conventions
 - Implemented dark theme by default
 - Set up proper navigation structure with Expo Router
+- Added services directory for API interactions
 
 ### Next Steps
-- Implement Story 1.3: API Key Validation
-- Add proper error handling
-- Implement success state and navigation
+- Implement Story 1.4: Display API Key Validation Success
+- Add navigation to main view on success
+- Implement proper success feedback
