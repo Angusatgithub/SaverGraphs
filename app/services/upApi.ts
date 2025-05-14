@@ -12,13 +12,42 @@ export class UpApiError extends Error {
 
 export async function validateApiKey(apiKey: string): Promise<boolean> {
   try {
+    // Remove any whitespace
+    const cleanKey = apiKey.trim().replace(/\s+/g, '');
+    
+    // Check if the key starts with 'up:yeah:'
+    if (!cleanKey.startsWith('up:yeah:')) {
+      throw new UpApiError(
+        400,
+        'Invalid API key format. The key should start with "up:yeah:"'
+      );
+    }
+
+    // Validate the token part after 'up:yeah:'
+    const tokenParts = cleanKey.split(':');
+    if (tokenParts.length !== 3 || tokenParts[0] !== 'up' || tokenParts[1] !== 'yeah') {
+      throw new UpApiError(
+        400,
+        'Invalid API key format. The key should be in the format "up:yeah:yourtoken"'
+      );
+    }
+
+    const actualToken = tokenParts[2];
+    if (!actualToken || !/^[a-zA-Z0-9]+$/.test(actualToken)) {
+      throw new UpApiError(
+        400,
+        'Invalid API key format. The token part should only contain letters and numbers.'
+      );
+    }
+
     console.log('Making request to Up API ping endpoint...');
-    console.log('API Key length:', apiKey.length);
-    console.log('First 10 chars:', apiKey.substring(0, 10));
+    console.log('API Key length:', cleanKey.length);
+    console.log('Token format valid:', cleanKey.startsWith('up:yeah:'));
     
     const response = await fetch(`${UP_API_BASE_URL}/util/ping`, {
+      method: 'GET',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${cleanKey}`,
         'Accept': 'application/json',
       },
     });
@@ -29,11 +58,16 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
       const errorText = await response.text();
       console.log('Error response:', errorText);
       
+      if (response.status === 401) {
+        throw new UpApiError(
+          401,
+          'Invalid API key. Please make sure you are using a valid Up Personal Access Token from your Up developer settings.'
+        );
+      }
+      
       throw new UpApiError(
         response.status,
-        response.status === 401 
-          ? 'Invalid API key'
-          : `API request failed with status ${response.status}`
+        `API request failed with status ${response.status}`
       );
     }
 

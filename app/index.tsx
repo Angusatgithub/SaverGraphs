@@ -19,11 +19,9 @@ export default function App() {
     setSuccess('');
 
     try {
-      const isValid = await validateApiKey(apiKey);
-      if (isValid) {
-        await storeApiKey(apiKey);
-        setSuccess('API key validated successfully!');
-      }
+      await validateApiKey(apiKey); // If this doesn't throw, it's valid
+      await storeApiKey(apiKey);
+      setSuccess('API key validated successfully!');
     } catch (err) {
       if (err instanceof UpApiError) {
         setError(err.message);
