@@ -266,3 +266,11 @@ alwaysApply: false
   - Implemented logic to find the balance just before the current month started and prepends this balance as the data point for the 1st of the current month if no actual transaction data exists on the 1st but there was a prior balance.
   - If no transactions occurred in the current month, it displays the carried-forward balance from the start of the month for both the 1st and today's date (if different).
 - This ensures the graph, by default, displays aggregated savings data for the current calendar month.
+
+## May 16, 2024 - Account Filter Button (Story 4.1)
+
+### Story 4.1: Display Account Filter Button
+- Added a "Filter Accounts" button to the `Dashboard` screen (`app/dashboard.tsx`).
+- The button is implemented using `TouchableOpacity` and `ThemedText` for styling consistent with the app theme.
+- Positioned the button between the summary overview box and the balance chart.
+- On press, the button currently logs a message to the console. Actual filter UI and logic will follow in subsequent stories.

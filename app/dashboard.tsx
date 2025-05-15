@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import BalanceChart from '../components/BalanceChart';
 import ThemedText from '../components/ThemedText';
 import { UpAccount } from './services/upApi';
@@ -30,6 +30,14 @@ export default function Dashboard({ accounts, transactionSummary, balanceSummary
         <ThemedText style={styles.summaryText}>Total Transactions (last 90 days): {totalTransactions}</ThemedText>
         <ThemedText style={styles.summaryText}>{balanceSummary.dates.length} days with transaction data</ThemedText>
       </View>
+
+      {/* Filter Accounts Button */} 
+      <TouchableOpacity 
+        style={styles.filterButton}
+        onPress={() => console.log('Filter Accounts button pressed')}
+      >
+        <ThemedText style={styles.filterButtonText}>Filter Accounts</ThemedText>
+      </TouchableOpacity>
 
       <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} isLoading={isLoading} />
 
@@ -101,5 +109,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
     marginTop: 4,
+  },
+  filterButton: {
+    backgroundColor: '#2C2C2E', // A slightly different shade for buttons
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 20, // Space before the chart
+  },
+  filterButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 
