@@ -190,16 +190,19 @@ function processBalances(
     accountDailyBalances.set(account.id, dailyBalances);
   }
 
-  // Step 2: Aggregate across accounts for each date
+  // Step 2: Aggregate across accounts for each date, carrying forward balances
   const allSortedDates = Array.from(allDates).sort();
+  const lastKnown: Record<string, number> = {};
   const aggregatedBalances: number[] = [];
   for (const date of allSortedDates) {
     let total = 0;
     for (const account of accounts) {
       const dailyBalances = accountDailyBalances.get(account.id);
       if (dailyBalances && dailyBalances.has(date)) {
-        total += dailyBalances.get(date)!;
+        lastKnown[account.id] = dailyBalances.get(date)!;
       }
+      // Use last known balance, or 0 if none
+      total += lastKnown[account.id] ?? 0;
     }
     aggregatedBalances.push(parseFloat(total.toFixed(2)));
   }

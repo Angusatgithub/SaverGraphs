@@ -194,3 +194,8 @@ alwaysApply: false
 - Added Y-axis labels for min and max balance (always shows at least $0 and the highest balance).
 - Added X-axis labels for the first and last date in the data.
 - Labels styled for dark theme and positioned around the Skia canvas for clarity.
+
+## May 16, 2024 - Bugfix: Carry-Forward Balance in processBalances
+
+- Fixed the processBalances helper to correctly carry forward the last known balance for each account on days with no transaction.
+- This prevents sudden drops to zero and ensures the savings graph is smooth and accurate.
