@@ -1,6 +1,6 @@
+import { ThemedText } from '@/components/ThemedText';
 import React, { useState } from 'react';
 import { Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import ThemedText from './ThemedText';
 
 interface ApiKeyInputProps {
   onSubmit?: (apiKey: string) => void;

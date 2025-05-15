@@ -1,6 +1,6 @@
+import { ThemedText } from '@/components/ThemedText';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import ThemedText from './ThemedText';
 
 // Store logs in memory
 let logs: string[] = [];

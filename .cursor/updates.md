@@ -157,3 +157,16 @@ alwaysApply: false
 
 ### Testing
 - Verified that transaction counts are fetched and displayed for each savings account after login.
+
+## May 15, 2024 - Correct Transaction Processing (Story 3.0)
+
+### Story 3.0: Process Transactions into Date/Balance Data Points
+- Modified the `processBalances` helper function in `app/index.tsx`.
+- The function now correctly calculates daily aggregated balances for saver accounts according to the acceptance criteria:
+  - It determines each account's balance for days it had transactions using the `balanceAfter` of the last transaction of that day.
+  - It collects all unique dates across all accounts that had transaction activity.
+  - For each such unique date (sorted chronologically), it calculates an aggregated total balance.
+  - If an account had a transaction on the current date, its `balanceAfter` is used.
+  - If an account did *not* have a transaction on the current date, its most recently known `balanceAfter` (from a previous transaction day in the sorted list) is carried forward to the current date's aggregation.
+  - If an account has had no transactions up to the current date in the sorted list, it contributes 0 to the aggregate until its first transaction.
+- This ensures the `balanceSummary` (containing `dates` and `balances`) provided to the dashboard is accurate for future graph plotting.

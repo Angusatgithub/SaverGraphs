@@ -1,6 +1,6 @@
+import { ThemedText } from '@/components/ThemedText';
 import React, { useEffect } from 'react';
 import { Animated, StyleSheet } from 'react-native';
-import ThemedText from './ThemedText';
 
 interface SuccessMessageProps {
   message: string;

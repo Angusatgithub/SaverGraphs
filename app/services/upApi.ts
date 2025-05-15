@@ -126,6 +126,10 @@ export interface UpTransaction {
       currencyCode: string;
     };
     createdAt: string;
+    balanceAfter: {
+      value: string;
+      currencyCode: string;
+    };
     // Add more fields as needed
   };
 }
