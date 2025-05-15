@@ -16,15 +16,25 @@ const CHART_BOTTOM_PADDING = 2; // Extra space for min label
 const CALLOUT_WIDTH = 120;
 const CALLOUT_HEIGHT = 60;
 
-function formatCurrency(value: number): string {
+const formatCurrency = (value: number): string => {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+};
 
-function formatDateLabel(dateStr: string): string {
-  // Show as e.g. '14 May' or 'May 2024' if year changes
-  const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+// Restore the function definition
+const formatDateForCalloutLabel = (dateStr: string): string => {
+  if (typeof dateStr !== 'string' || !dateStr) {
+    return 'Invalid DateStr'; 
+  }
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      return 'Invalid Date Obj';
+    }
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch (e) {
+    return 'Date Format Error'; 
+  }
+};
 
 interface CalloutData {
   xPosition: number; // screen x to position callout
@@ -71,6 +81,8 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   const yTop = CHART_PADDING;
   const yBottom = CHART_HEIGHT + CHART_PADDING - CHART_BOTTOM_PADDING;
 
+  // console.log(`Chart Calculated Values: xStep=${xStep}, yRange=${yRange}, minBalance=${minBalance}, maxBalance=${maxBalance}`); // Added for debugging
+
   const points = plotBalances.map((bal, i) => ({
     x: CHART_PADDING + i * xStep,
     y: yTop + (1 - (bal - minBalance) / yRange) * (yBottom - yTop),
@@ -84,40 +96,75 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   };
 
   const panGesture = Gesture.Pan()
-    .onBegin((event) => {
+    .onBegin((event: PanGestureHandlerEventPayload) => {
       isActive.value = true;
-      touchX.value = event.x; // event.x is relative to the GestureDetector
+      touchX.value = event.x;
+      // touchY.value = event.y; // Keep commented if not strictly needed yet
+      console.log(`Gesture Begin: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`); // Ensure this is active
     })
     .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
+      // console.log('Gesture Update event raw:', event); // Simplest log to check if onUpdate is firing
       if (isActive.value) {
         touchX.value = event.x;
         const currentX = event.x;
 
+        console.log(`Gesture Update: currentX=${currentX.toFixed(2)}`); // More specific log
+
         if (currentX !== null && xStep > 0 && plotDates.length > 0) {
-          // Adjust touchX to be relative to the chart's plottable area
           const chartRelativeX = currentX - CHART_PADDING;
           let selectedIndex = Math.round(chartRelativeX / xStep);
           selectedIndex = Math.max(0, Math.min(plotDates.length - 1, selectedIndex));
 
-          if (selectedIndex >= 0 && selectedIndex < plotDates.length) {
-            const point = points[selectedIndex];
-            const date = plotDates[selectedIndex];
-            const balance = plotBalances[selectedIndex];
-            
-            // Calculate screen X for callout: use the actual point's X for precision
-            // currentX is the raw touch; point.x is the data point's canvas X
-            let calloutXPosition = point.x - (CALLOUT_WIDTH / 2); 
-            // Ensure callout doesn't go off screen
-            calloutXPosition = Math.max(CHART_PADDING, calloutXPosition);
-            calloutXPosition = Math.min(windowWidth - CHART_PADDING - CALLOUT_WIDTH, calloutXPosition);
+          // console.log(`onUpdate: chartRelativeX=${chartRelativeX}, selectedIndex=${selectedIndex}`); // Debugging
+          console.log('Type of formatDateForCalloutLabel:', typeof formatDateForCalloutLabel, formatDateForCalloutLabel);
+          console.log('Value of date to be formatted:', plotDates[selectedIndex]);
 
-            runOnJS(updateCalloutJS)({
-              xPosition: calloutXPosition, 
-              yPosition: point.y - CALLOUT_HEIGHT - 8, // Position above the point
-              date: formatDateLabel(date),
-              balance: balance,
-              isVisible: true,
-            });
+          if (selectedIndex >= 0 && selectedIndex < plotDates.length) {
+            try {
+              const point = points[selectedIndex];
+              const dateStr = plotDates[selectedIndex]; 
+              const balance = plotBalances[selectedIndex];
+              
+              if (point === undefined || dateStr === undefined || balance === undefined) {
+                runOnJS(updateCalloutJS)(null);
+                return;
+              }
+
+              // Keep Inlined date formatting logic for the callout as it was working
+              let formattedDateForCallout;
+              if (typeof dateStr !== 'string' || !dateStr) {
+                formattedDateForCallout = 'Invalid DateStr';
+              } else {
+                try {
+                  const dateObj = new Date(dateStr);
+                  if (isNaN(dateObj.getTime())) {
+                    formattedDateForCallout = 'Invalid Date Obj';
+                  } else {
+                    formattedDateForCallout = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                  }
+                } catch (e) {
+                  formattedDateForCallout = 'Date Format Error';
+                }
+              }
+              // --- Inlined date formatting logic --- END
+
+              let calloutXPosition = point.x - (CALLOUT_WIDTH / 2); 
+              calloutXPosition = Math.max(CHART_PADDING, calloutXPosition);
+              calloutXPosition = Math.min(windowWidth - CHART_PADDING - CALLOUT_WIDTH, calloutXPosition);
+
+              const dataForCallout: CalloutData = {
+                xPosition: calloutXPosition, 
+                yPosition: point.y - CALLOUT_HEIGHT - 8, 
+                date: formattedDateForCallout, // Use inlined result for callout
+                balance: balance, 
+                isVisible: true,
+              };
+              console.log('Data for callout state update:', JSON.stringify(dataForCallout));
+              runOnJS(updateCalloutJS)(dataForCallout);
+            } catch (e: any) {
+              console.error('Error processing data for callout:', e.message); // Ensure this logs if error occurs
+              runOnJS(updateCalloutJS)(null);
+            }
           } else {
             runOnJS(updateCalloutJS)(null);
           }
@@ -135,8 +182,9 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
 
   const minLabel = formatCurrency(minBalance);
   const maxLabel = formatCurrency(maxBalance);
-  const firstDateLabel = plotDates.length > 0 ? formatDateLabel(plotDates[0]) : "";
-  const lastDateLabel = plotDates.length > 0 ? formatDateLabel(plotDates[plotDates.length - 1]) : "";
+  // Axis labels will now call the restored function
+  const firstDateLabel = plotDates.length > 0 && plotDates[0] ? formatDateForCalloutLabel(plotDates[0]) : ""; 
+  const lastDateLabel = plotDates.length > 0 && plotDates[plotDates.length - 1] ? formatDateForCalloutLabel(plotDates[plotDates.length - 1]) : "";
 
   return (
     <GestureDetector gesture={panGesture}>

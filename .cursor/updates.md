@@ -247,3 +247,9 @@ alwaysApply: false
 - The callout displays the formatted date and balance of the selected point.
 - The callout appears during scrubbing and disappears when the gesture ends (`onEnd`).
 - Ensured callout positioning attempts to stay within screen bounds.
+
+### Story 3.5 Debugging Notes:
+- Encountered a persistent runtime error where a locally defined helper function (`formatDateForCalloutLabel` or `formatDateLabel`) was being treated as an object (`typeof` reported "object") specifically when called from the gesture handler context, leading to "is not a function" or ".call is not a function" errors.
+- Renaming, redefining as arrow function, and explicit `.call()` did not resolve the issue initially.
+- The issue was resolved by keeping the date formatting logic for the callout *inlined* within the gesture handler's `onUpdate` callback (inside the `runOnJS` block). The axis label formatting, using the same helper function but called during the main render pass, worked correctly once the function definition was restored to avoid `ReferenceError`.
+- This suggests a subtle issue with function references or closures in the Reanimated/Gesture Handler to JS thread bridge for that specific call path, or a bundler/runtime anomaly.
