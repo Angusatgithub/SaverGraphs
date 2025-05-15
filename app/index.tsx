@@ -5,8 +5,15 @@ import ApiKeyInput from './components/ApiKeyInput';
 import ErrorMessage from './components/ErrorMessage';
 import SuccessMessage from './components/SuccessMessage';
 import Dashboard from './dashboard';
-import { getStoredApiKey, storeApiKey } from './services/storage';
-import { fetchAccounts, fetchRecentTransactions, UpAccount, UpApiError, UpTransaction, validateApiKey } from './services/upApi';
+import {
+  getStoredApiKey,
+  getStoredSelectedAccountIds, // Import new function
+  getStoredTimeframe,
+  storeApiKey, // Import new function
+  storeSelectedAccountIds, // Import new function
+  storeTimeframe // Import new function
+} from './services/storage';
+import { fetchAccounts, fetchTransactions, UpAccount, UpApiError, UpTransaction, validateApiKey } from './services/upApi';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true); // Start loading immediately
@@ -18,10 +25,16 @@ export default function App() {
   const [transactionSummary, setTransactionSummary] = useState<Record<string, number>>({});
   const [balanceSummary, setBalanceSummary] = useState<{ dates: string[]; balances: number[] }>({ dates: [], balances: [] });
   const [currentTimeframe, setCurrentTimeframe] = useState<Timeframe>('Monthly'); // Use imported Timeframe type, default Monthly
-  const [selectedAccountIdsForChart, setSelectedAccountIdsForChart] = useState<string[]>([]);
+  const [selectedAccountIdsForChart, setSelectedAccountIdsForChart] = useState<string[]>([]); // Initialize as empty, will be populated from storage or default
+  const [currentPeriodReferenceDate, setCurrentPeriodReferenceDate] = useState<Date>(new Date()); // New state
 
   // Centralized data processing and fetching logic
-  const fetchDataAndProcessBalances = async (currentApiKey: string, currentSelectedIds: string[], currentTf: Timeframe) => {
+  const fetchDataAndProcessBalances = async (
+    currentApiKey: string, 
+    initialSelectedIds: string[] | null, 
+    currentTf: Timeframe,
+    referenceDate: Date // New parameter
+  ) => {
     if (!currentApiKey) return;
     setIsLoading(true);
     try {
@@ -33,25 +46,44 @@ export default function App() {
 
       const freshAllTransactions: Record<string, UpTransaction[]> = {};
       const summary: Record<string, number> = {};
+      
+      // Determine the 'since' date for fetching transactions (e.g., 365 days ago for Yearly view support)
+      const sinceDate = new Date();
+      sinceDate.setDate(sinceDate.getDate() - 365);
+      const sinceDateISO = sinceDate.toISOString();
+
       for (const acct of saverAccounts) {
-        const txns = await fetchRecentTransactions(currentApiKey, acct.id);
+        // Fetch transactions for the last 365 days
+        const txns = await fetchTransactions(currentApiKey, acct.id, sinceDateISO);
         summary[acct.id] = txns.length;
         freshAllTransactions[acct.id] = txns;
       }
-      setAllTransactions(freshAllTransactions); // Store all fetched transactions
+      setAllTransactions(freshAllTransactions); 
       setTransactionSummary(summary);
       
-      // Initialize selected IDs if they haven't been set yet or if accounts list changed
-      // This ensures that selectedAccountIdsForChart has a valid list of IDs corresponding to 'saverAccounts'
-      const validSelectedIds = currentSelectedIds.length > 0 
-        ? currentSelectedIds.filter(id => saverAccounts.some(acc => acc.id === id))
-        : saverAccounts.map(acc => acc.id);
-      if (currentSelectedIds.length === 0 && saverAccounts.length > 0) {
-         setSelectedAccountIdsForChart(validSelectedIds); // Initialize if it was empty
+      // Use initialSelectedIds if provided and valid, otherwise default to all saverAccounts
+      let effectiveSelectedIds = initialSelectedIds && initialSelectedIds.length > 0
+        ? initialSelectedIds.filter(id => saverAccounts.some(acc => acc.id === id))
+        : [];
+      
+      if (effectiveSelectedIds.length === 0 && saverAccounts.length > 0) {
+        effectiveSelectedIds = saverAccounts.map(acc => acc.id); // Default to all if no valid initial selection
+      }
+      
+      setSelectedAccountIdsForChart(effectiveSelectedIds); // Set the state based on loaded/default
+      // If we just set them, and it's the first load, store them so they persist if unchanged.
+      if (initialSelectedIds === null && effectiveSelectedIds.length > 0) { // Only store if it was an initial default set
+          await storeSelectedAccountIds(effectiveSelectedIds);
       }
 
 
-      const { dates, balances } = processBalances(freshAllTransactions, saverAccounts, currentTf, validSelectedIds);
+      const { dates, balances } = processBalances(
+        freshAllTransactions, 
+        saverAccounts, 
+        currentTf, 
+        effectiveSelectedIds,
+        referenceDate // Pass to processBalances
+      );
       setBalanceSummary({ dates, balances });
 
     } catch (err) {
@@ -71,16 +103,26 @@ export default function App() {
 
   // On mount, check for stored API key
   useEffect(() => {
-    const checkStoredKey = async () => {
-      setIsLoading(true); // Explicitly set loading true at the start of this effect
+    const checkStoredKeyAndPreferences = async () => { 
+      setIsLoading(true);
       try {
         const storedKey = await getStoredApiKey();
         if (storedKey) {
-          await validateApiKey(storedKey); // Ping to ensure key is still valid
+          await validateApiKey(storedKey); 
           setApiKey(storedKey);
-          // Initial fetch. Selected accounts will be all saver accounts by default.
-          // No need to pass selectedAccountIdsForChart here yet, as it will be initialized by fetchDataAndProcessBalances
-          await fetchDataAndProcessBalances(storedKey, [], currentTimeframe);
+          
+          const storedSelectedIds = await getStoredSelectedAccountIds();
+          const storedTf = await getStoredTimeframe();
+          let refDate = new Date(); // Default to today for period reference
+
+          if (storedTf) {
+            setCurrentTimeframe(storedTf);
+          }
+          // Note: We are not storing/retrieving currentPeriodReferenceDate for now.
+          // It will always start based on 'today' when app loads or API key changes.
+          // Persisting this could be a future enhancement if desired.
+          
+          await fetchDataAndProcessBalances(storedKey, storedSelectedIds, storedTf || currentTimeframe, refDate);
         }
       } catch (err) {
         // If stored key is invalid or error during validation/fetch, clear it and show input
@@ -92,21 +134,26 @@ export default function App() {
         setIsLoading(false);
       }
     };
-    checkStoredKey();
+    checkStoredKeyAndPreferences(); // Call renamed function
   }, []); // Runs once on mount
 
   const handleApiKeySubmit = async (inputKey: string) => {
     setIsLoading(true);
     setError('');
     setSuccess('');
-    setApiKey(inputKey); // Set API key immediately for fetchDataAndProcessBalances
+    setApiKey(inputKey); 
 
     try {
-      await validateApiKey(inputKey); // Ping first
+      await validateApiKey(inputKey); 
       await storeApiKey(inputKey);
       setSuccess('API key validated successfully!');
-      // Fetch data with the new key. Selected accounts will default to all.
-      await fetchDataAndProcessBalances(inputKey, [], currentTimeframe); 
+      const defaultTimeframe: Timeframe = 'Monthly';
+      setCurrentTimeframe(defaultTimeframe);
+      await storeTimeframe(defaultTimeframe);
+      const refDate = new Date(); // Reset period reference to today
+      setCurrentPeriodReferenceDate(refDate);
+      
+      await fetchDataAndProcessBalances(inputKey, null, defaultTimeframe, refDate); 
     } catch (err) {
       await storeApiKey(''); // Clear invalid key
       setApiKey(null);
@@ -131,33 +178,69 @@ export default function App() {
   
   // Effect to re-process balances when selected accounts or timeframe change
   useEffect(() => {
-    if (apiKey && accounts && Object.keys(allTransactions).length > 0) { // Ensure base data is loaded
+    if (apiKey && accounts && Object.keys(allTransactions).length > 0) { 
       setIsLoading(true);
-      // Use a microtask to allow UI to update (e.g., show loader) before heavy computation
       Promise.resolve().then(() => {
         const { dates, balances } = processBalances(
           allTransactions, 
-          accounts, // Pass all fetched saver accounts
+          accounts, 
           currentTimeframe, 
-          selectedAccountIdsForChart // Pass the currently selected IDs
+          selectedAccountIdsForChart,
+          currentPeriodReferenceDate // Use state here
         );
         setBalanceSummary({ dates, balances });
         setIsLoading(false);
       });
     }
-  }, [selectedAccountIdsForChart, currentTimeframe, allTransactions, accounts, apiKey]); // Added allTransactions, accounts, apiKey dependencies
+  }, [selectedAccountIdsForChart, currentTimeframe, allTransactions, accounts, apiKey, currentPeriodReferenceDate]); // Added currentPeriodReferenceDate
 
-  const handleAccountSelectionChange = (newSelectedAccountIds: string[]) => {
+  const handleAccountSelectionChange = async (newSelectedAccountIds: string[]) => { 
     setSelectedAccountIdsForChart(newSelectedAccountIds);
-    // The useEffect for selectedAccountIdsForChart change will trigger re-processing.
+    await storeSelectedAccountIds(newSelectedAccountIds); 
   };
 
-  const handleTimeframeChange = (newTimeframe: Timeframe) => {
+  const handleTimeframeChange = async (newTimeframe: Timeframe) => { 
     if (currentTimeframe !== newTimeframe) {
       setCurrentTimeframe(newTimeframe);
-      // The useEffect for currentTimeframe change (already existing) will trigger re-processing.
-      // No need to call processBalances directly here, as the effect on [..., currentTimeframe, ...] will handle it.
+      await storeTimeframe(newTimeframe);
+      setCurrentPeriodReferenceDate(new Date()); // Reset period to 'today' for new timeframe
     }
+  };
+
+  const handlePreviousPeriod = () => {
+    const newRefDate = new Date(currentPeriodReferenceDate);
+    switch (currentTimeframe) {
+      case 'Weekly':
+        newRefDate.setDate(newRefDate.getDate() - 7);
+        break;
+      case 'Monthly':
+        newRefDate.setMonth(newRefDate.getMonth() - 1);
+        break;
+      case 'Yearly':
+        newRefDate.setFullYear(newRefDate.getFullYear() - 1);
+        break;
+    }
+    setCurrentPeriodReferenceDate(newRefDate);
+  };
+
+  const handleNextPeriod = () => {
+    const newRefDate = new Date(currentPeriodReferenceDate);
+    switch (currentTimeframe) {
+      case 'Weekly':
+        newRefDate.setDate(newRefDate.getDate() + 7);
+        break;
+      case 'Monthly':
+        newRefDate.setMonth(newRefDate.getMonth() + 1);
+        break;
+      case 'Yearly':
+        newRefDate.setFullYear(newRefDate.getFullYear() + 1);
+        break;
+    }
+    // Optional: Prevent navigating to future periods beyond 'today'
+    // if (newRefDate > new Date()) {
+    //  return; 
+    // }
+    setCurrentPeriodReferenceDate(newRefDate);
   };
 
   const handleRefreshData = async () => {
@@ -166,8 +249,8 @@ export default function App() {
       setSuccess(''); // Clear previous success messages
       // Call fetchDataAndProcessBalances, it will set isLoading true.
       // It will use the currently selected accounts and timeframe.
-      await fetchDataAndProcessBalances(apiKey, selectedAccountIdsForChart, currentTimeframe);
-      setSuccess('Data refreshed successfully!'); // Show success message after refresh
+      await fetchDataAndProcessBalances(apiKey, selectedAccountIdsForChart, currentTimeframe, currentPeriodReferenceDate); // Pass current refDate
+      setSuccess('Data refreshed successfully!'); 
     } else {
       setError("Cannot refresh data: API key is not set.");
     }
@@ -192,7 +275,10 @@ export default function App() {
           onAccountSelectionChange={handleAccountSelectionChange}
           onRefreshData={handleRefreshData}
           currentTimeframe={currentTimeframe}
-          onTimeframeChange={handleTimeframeChange} // Pass new handler
+          onTimeframeChange={handleTimeframeChange}
+          currentPeriodReferenceDate={currentPeriodReferenceDate} // Pass new prop
+          onPreviousPeriod={handlePreviousPeriod} // Pass new prop
+          onNextPeriod={handleNextPeriod} // Pass new prop
         />
       ) : (
         !isLoading && <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
@@ -215,9 +301,10 @@ const styles = StyleSheet.create({
 // Helper to process balances
 function processBalances(
   txByAccount: Record<string, UpTransaction[]>,
-  allSaverAccounts: UpAccount[], // Renamed to reflect it's all available saver accounts
-  timeframe: Timeframe, // Use imported Timeframe type
-  selectedAccountIds: string[] // New parameter
+  allSaverAccounts: UpAccount[], 
+  timeframe: Timeframe, 
+  selectedAccountIds: string[],
+  referenceDate: Date // New parameter
 ): { dates: string[]; balances: number[] } {
   // Filter accounts and their transactions based on selectedAccountIds
   const accountsToProcess = allSaverAccounts.filter(acc => selectedAccountIds.includes(acc.id));
@@ -296,98 +383,126 @@ function processBalances(
     aggregatedBalancesFullHistory.push(parseFloat(total.toFixed(2)));
   }
 
-  if (timeframe === 'All') {
-    console.log('processBalances (All): dates', allSortedDatesFullHistory);
-    console.log('processBalances (All): balances', aggregatedBalancesFullHistory);
-    return { dates: allSortedDatesFullHistory, balances: aggregatedBalancesFullHistory };
-  }
-
-  // Placeholder for Weekly and Yearly - current logic only handles Monthly and All
-  if (timeframe === 'Weekly') {
-    // TODO: Implement weekly filtering logic (Story 4.8)
-    // For now, return full history or a specific message/empty data
-    console.warn("Weekly timeframe processing not yet implemented. Showing 'All' data for now.");
-    return { dates: allSortedDatesFullHistory, balances: aggregatedBalancesFullHistory }; 
-  }
-
-  if (timeframe === 'Yearly') {
-    // TODO: Implement yearly filtering logic (Story 4.10)
-    // For now, return full history or a specific message/empty data
-    console.warn("Yearly timeframe processing not yet implemented. Showing 'All' data for now.");
-    return { dates: allSortedDatesFullHistory, balances: aggregatedBalancesFullHistory };
-  }
-
-  if (timeframe === 'Monthly') {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-indexed
-    const currentMonthStartDate = new Date(year, month, 1).toISOString().slice(0, 10);
-    const currentMonthEndDate = now.toISOString().slice(0, 10); // Today
-
+  const filterDataForTimeframe = (
+    startDate: string, 
+    endDate: string, 
+    allDates: string[], 
+    allBalances: number[]
+  ): { dates: string[]; balances: number[] } => {
     let startIndex = -1;
-    let balanceOnMonthStart = 0;
-    let foundBalanceForMonthStart = false;
+    let balanceBeforePeriod = 0;
+    let foundBalanceBeforePeriod = false;
 
-    // Find data for the current month from the full history
-    for (let i = 0; i < allSortedDatesFullHistory.length; i++) {
-      const date = allSortedDatesFullHistory[i];
-      if (date < currentMonthStartDate) {
-        // This balance is before our month starts, could be the one to carry forward
-        balanceOnMonthStart = aggregatedBalancesFullHistory[i];
-        foundBalanceForMonthStart = true;
-      } else if (date >= currentMonthStartDate && date <= currentMonthEndDate) {
+    for (let i = 0; i < allDates.length; i++) {
+      const date = allDates[i];
+      if (date < startDate) {
+        balanceBeforePeriod = allBalances[i];
+        foundBalanceBeforePeriod = true;
+      } else if (date >= startDate && date <= endDate) {
         if (startIndex === -1) {
           startIndex = i;
-          // If the first data point found is after the 1st of the month, 
-          // we use the balanceOnMonthStart (last known before this month started or on 1st if available earlier in loop)
-          // If allSortedDatesFullHistory[startIndex] IS currentMonthStartDate, this is fine.
-          // If allSortedDatesFullHistory[startIndex] is LATER than currentMonthStartDate, we need to prepend.
         }
       }
-      if (date > currentMonthEndDate && startIndex !== -1) {
-        // We've passed all relevant dates for the month
+      if (date > endDate && startIndex !== -1) {
         break;
       }
     }
 
-    const monthlyDates: string[] = [];
-    const monthlyBalances: number[] = [];
+    const periodDates: string[] = [];
+    const periodBalances: number[] = [];
 
-    if (startIndex !== -1) { // If we found any data within the month
-      // Check if we need to prepend the start-of-month balance
-      if (allSortedDatesFullHistory[startIndex] > currentMonthStartDate && foundBalanceForMonthStart) {
-        monthlyDates.push(currentMonthStartDate);
-        monthlyBalances.push(balanceOnMonthStart);
+    if (startIndex !== -1) {
+      if (allDates[startIndex] > startDate && foundBalanceBeforePeriod) {
+        periodDates.push(startDate);
+        periodBalances.push(balanceBeforePeriod);
       }
-      
-      for (let i = startIndex; i < allSortedDatesFullHistory.length; i++) {
-        if (allSortedDatesFullHistory[i] <= currentMonthEndDate) {
-          monthlyDates.push(allSortedDatesFullHistory[i]);
-          monthlyBalances.push(aggregatedBalancesFullHistory[i]);
+      for (let i = startIndex; i < allDates.length; i++) {
+        if (allDates[i] <= endDate) {
+          periodDates.push(allDates[i]);
+          periodBalances.push(allBalances[i]);
         } else {
-          break; // Past current month's end date
+          break;
         }
       }
-    } else if (foundBalanceForMonthStart) {
-      // No transactions this month, but there was a balance before this month started.
-      // Show this balance for the 1st of the month up to today.
-      // For simplicity, just show for the 1st and for today if today is after 1st.
-      monthlyDates.push(currentMonthStartDate);
-      monthlyBalances.push(balanceOnMonthStart);
-      if (currentMonthEndDate > currentMonthStartDate) {
-         // Add today's date only if it's different from the start date and there are no other points
-        if (!monthlyDates.includes(currentMonthEndDate)) { 
-            monthlyDates.push(currentMonthEndDate);
-            monthlyBalances.push(balanceOnMonthStart); // Balance carries forward
+      // If the last data point in the period is before the period end date, and data exists,
+      // add the end date with the last known balance to complete the graph for the period.
+      if (periodDates.length > 0 && periodDates[periodDates.length -1] < endDate) {
+        if (!periodDates.includes(endDate)) { // Avoid duplicate if endDate already has data
+             periodDates.push(endDate);
+             periodBalances.push(periodBalances[periodBalances.length -1]);
         }
+      }
+
+    } else if (foundBalanceBeforePeriod) {
+      periodDates.push(startDate);
+      periodBalances.push(balanceBeforePeriod);
+      if (endDate > startDate && !periodDates.includes(endDate)) {
+        periodDates.push(endDate);
+        periodBalances.push(balanceBeforePeriod);
       }
     }
-    // If monthlyDates is still empty (e.g., new user, no history at all), it will return empty.
+    return { dates: periodDates, balances: periodBalances };
+  };
 
-    console.log('processBalances (Monthly): dates', monthlyDates);
-    console.log('processBalances (Monthly): balances', monthlyBalances);
-    return { dates: monthlyDates, balances: monthlyBalances };
+  const refDateForCalc = new Date(referenceDate); // Use the passed referenceDate
+
+  if (timeframe === 'Weekly') {
+    const currentDay = refDateForCalc.getDay(); 
+    const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay; 
+    const monday = new Date(refDateForCalc);
+    monday.setDate(refDateForCalc.getDate() + diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const startDate = monday.toISOString().slice(0, 10);
+    const endDate = sunday.toISOString().slice(0, 10);
+    
+    console.log(`processBalances (Weekly): Start: ${startDate}, End: ${endDate}`);
+    const result = filterDataForTimeframe(startDate, endDate, allSortedDatesFullHistory, aggregatedBalancesFullHistory);
+    console.log('processBalances (Weekly): dates', result.dates);
+    console.log('processBalances (Weekly): balances', result.balances);
+    return result;
   }
 
-  return { dates: [], balances: [] }; // Should not be reached if timeframe is handled
+  if (timeframe === 'Yearly') {
+    const year = refDateForCalc.getFullYear();
+    const startDate = new Date(year, 0, 1).toISOString().slice(0, 10); 
+    const endDate = new Date(year, 11, 31).toISOString().slice(0, 10); 
+    
+    const today = new Date(); // Define today for capping logic
+    const todayStr = today.toISOString().slice(0,10);
+    let effectiveEndDate = endDate;
+    
+    if (year === today.getFullYear() && todayStr < endDate) {
+        effectiveEndDate = todayStr;
+    }
+
+    console.log(`processBalances (Yearly): Start: ${startDate}, End: ${effectiveEndDate}`);
+    const result = filterDataForTimeframe(startDate, effectiveEndDate, allSortedDatesFullHistory, aggregatedBalancesFullHistory);
+    console.log('processBalances (Yearly): dates', result.dates);
+    console.log('processBalances (Yearly): balances', result.balances);
+    return result;
+  }
+
+  if (timeframe === 'Monthly') {
+    const year = refDateForCalc.getFullYear();
+    const month = refDateForCalc.getMonth(); 
+    const currentMonthStartDate = new Date(year, month, 1).toISOString().slice(0, 10);
+    
+    let currentMonthEndDate;
+    const today = new Date(); // Define today for capping logic
+    if (year === today.getFullYear() && month === today.getMonth()) {
+        currentMonthEndDate = today.toISOString().slice(0, 10);
+    } else {
+        currentMonthEndDate = new Date(year, month + 1, 0).toISOString().slice(0, 10); // Last day of the month
+    }
+
+    console.log(`processBalances (Monthly): Start: ${currentMonthStartDate}, End: ${currentMonthEndDate}`);
+    const result = filterDataForTimeframe(currentMonthStartDate, currentMonthEndDate, allSortedDatesFullHistory, aggregatedBalancesFullHistory);
+    console.log('processBalances (Monthly): dates', result.dates);
+    console.log('processBalances (Monthly): balances', result.balances);
+    return result;
+  }
+
+  return { dates: [], balances: [] }; 
 }

@@ -10,7 +10,7 @@ interface BalanceChartProps {
   isLoading: boolean;
 }
 
-const CHART_HEIGHT = 200;
+const CHART_HEIGHT = 360;
 const CHART_PADDING = 16;
 const CHART_BOTTOM_PADDING = 2; // Extra space for min label
 const CALLOUT_WIDTH = 120;

@@ -17,6 +17,9 @@ interface DashboardProps {
   onRefreshData: () => Promise<void>;
   currentTimeframe: Timeframe;
   onTimeframeChange: (timeframe: Timeframe) => void;
+  currentPeriodReferenceDate: Date;
+  onPreviousPeriod: () => void;
+  onNextPeriod: () => void;
 }
 
 export default function Dashboard({ 
@@ -28,7 +31,10 @@ export default function Dashboard({
   onAccountSelectionChange,
   onRefreshData,
   currentTimeframe,
-  onTimeframeChange
+  onTimeframeChange,
+  currentPeriodReferenceDate,
+  onPreviousPeriod,
+  onNextPeriod
 }: DashboardProps) {
   const totalAccounts = accounts.length;
   const totalTransactions = Object.values(transactionSummary).reduce((sum, count) => sum + count, 0);
@@ -105,6 +111,9 @@ export default function Dashboard({
         totalSelectedTransactions={totalSelectedTransactions}
         daysWithData={balanceSummary.dates.length}
         onOpenTimeframeModal={() => setIsTimeframeModalVisible(true)}
+        currentPeriodReferenceDate={currentPeriodReferenceDate}
+        onPreviousPeriod={onPreviousPeriod}
+        onNextPeriod={onNextPeriod}
       />
 
       <AccountSelector 

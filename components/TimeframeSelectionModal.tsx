@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import ThemedText from './ThemedText';
 
-export type Timeframe = 'Weekly' | 'Monthly' | 'Yearly' | 'All'; // Extended Timeframe type
+export type Timeframe = 'Weekly' | 'Monthly' | 'Yearly'; // Removed 'All'
 
 interface TimeframeSelectionModalProps {
   isVisible: boolean;
@@ -11,7 +11,7 @@ interface TimeframeSelectionModalProps {
   onTimeframeSelect: (timeframe: Timeframe) => void;
 }
 
-const TIMEFRAME_OPTIONS: Timeframe[] = ['Weekly', 'Monthly', 'Yearly', 'All']; // 'All' could be 90-day view
+const TIMEFRAME_OPTIONS: Timeframe[] = ['Weekly', 'Monthly', 'Yearly']; // Removed 'All'
 
 export default function TimeframeSelectionModal({
   isVisible,

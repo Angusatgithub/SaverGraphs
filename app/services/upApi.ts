@@ -134,23 +134,62 @@ export interface UpTransaction {
   };
 }
 
-export async function fetchRecentTransactions(apiKey: string, accountId: string): Promise<UpTransaction[]> {
-  const cleanKey = apiKey.trim().replace(/\s+/g, '');
-  // Calculate date 90 days ago
-  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  const url = `${UP_API_BASE_URL}/accounts/${accountId}/transactions?filter[since]=${since}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${cleanKey}`,
-      'Accept': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.log('Error fetching transactions:', errorText);
-    throw new UpApiError(response.status, 'Failed to fetch transactions');
+export async function fetchTransactions(
+  apiKey: string, 
+  accountId: string, 
+  since?: string, // ISO8601 date string
+  until?: string, // ISO8601 date string
+  pageSize: number = 100 
+): Promise<UpTransaction[]> {
+  let allTransactions: UpTransaction[] = [];
+  let url: string | null = `${UP_API_BASE_URL}/accounts/${accountId}/transactions?page[size]=${pageSize}`;
+  
+  interface UpPaginatedResponse {
+    data: UpTransaction[];
+    links: {
+      next: string | null;
+    };
   }
-  const data = await response.json();
-  return data.data as UpTransaction[];
+
+  if (since) {
+    url += `&filter[since]=${since}`;
+  }
+  if (until) {
+    url += `&filter[until]=${until}`;
+  }
+
+  // Loop to handle pagination
+  while (url) {
+    console.log(`Fetching transactions from URL: ${url}`); 
+    const response: Response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error fetching transactions page:', errorText, 'Status:', response.status, 'URL:', url);
+      // Decide on error handling: throw for the whole batch, or try to return partial if any?
+      // For now, throwing on first error.
+      throw new UpApiError(response.status, `Failed to fetch transactions page. Status: ${response.status}`);
+    }
+
+    const pageData: UpPaginatedResponse = await response.json();
+    if (pageData.data && pageData.data.length > 0) {
+      allTransactions = allTransactions.concat(pageData.data);
+    }
+
+    // Check for the next page link
+    if (pageData.links && pageData.links.next) {
+      url = pageData.links.next;
+    } else {
+      url = null; // No more pages, exit loop
+    }
+  }
+  
+  console.log(`Fetched a total of ${allTransactions.length} transactions for account ${accountId}`);
+  return allTransactions; 
 } 

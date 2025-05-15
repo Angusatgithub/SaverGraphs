@@ -382,3 +382,46 @@ alwaysApply: false
 - Created new files for these components in the `components` directory: `DashboardHeader`, `SummaryDisplay`, `AccountListItem`, and `AccountSelector`.
 - Moved relevant JSX, logic, and styles to the new component files.
 - Updated `app/dashboard.tsx` to import and use these new components, reducing its complexity and improving maintainability.
+
+## May 17, 2024 - Persistence, Timeframe Refinements, and Period Navigation
+
+### Story 4.5: Persist Account Selection Preferences
+- Added `storeSelectedAccountIds` and `getStoredSelectedAccountIds` functions to `app/services/storage.ts`.
+- Modified `app/index.tsx` to load stored account ID preferences on app launch.
+- Selected account IDs are now saved to secure storage whenever the selection changes.
+- Ensured that if no preference is stored (e.g., first time after API key setup), the default selection (all accounts) is stored as the initial preference.
+
+### Story 4.11: Persist Last Selected Timeframe
+- Added `storeTimeframe` and `getStoredTimeframe` functions to `app/services/storage.ts`.
+- Modified `app/index.tsx` to load the stored timeframe preference on app launch.
+- The selected timeframe is now saved to secure storage whenever it's changed by the user.
+- The timeframe is reset to 'Monthly' (and this default is saved) when a new API key is successfully submitted.
+
+### Timeframe and Data Fetching Refinements
+- **Removed 'All' Timeframe Option:**
+  - Updated `Timeframe` type and `TIMEFRAME_OPTIONS` in `components/TimeframeSelectionModal.tsx` to remove 'All'.
+  - Removed the specific logic block for 'All' in `processBalances` in `app/index.tsx`.
+- **Enhanced Data Fetching for Yearly View:**
+  - Renamed `fetchRecentTransactions` to `fetchTransactions` in `app/services/upApi.ts`.
+  - Modified `fetchTransactions` to accept optional `since` and `until` date parameters and a `pageSize` (defaulting to 100).
+  - Updated `app/index.tsx` in `fetchDataAndProcessBalances` to call `fetchTransactions` to retrieve data for the last 365 days, providing more data for the 'Yearly' view.
+- **Implemented Transaction Pagination:**
+  - Further updated `fetchTransactions` in `app/services/upApi.ts` to handle paginated API responses from the Up API.
+  - The function now iteratively fetches all pages of transactions using the `links.next` URL, ensuring all available transactions within the specified date range (e.g., last 365 days) are retrieved.
+  - Fixed TypeScript linter errors related to type inference for `url`, `response`, and `pageData` by adding explicit types and an interface for the paginated response.
+
+### Graph Period Navigation (Previous/Next Week, Month, Year)
+- **State and Logic in `app/index.tsx`:**
+  - Added `currentPeriodReferenceDate` state to track the reference point for graph period calculations.
+  - Implemented `handlePreviousPeriod` and `handleNextPeriod` functions to adjust `currentPeriodReferenceDate`.
+  - Modified `processBalances` to accept and use `currentPeriodReferenceDate` for calculating date ranges for 'Weekly', 'Monthly', and 'Yearly' views.
+  - Updated `handleTimeframeChange` to reset `currentPeriodReferenceDate` to `new Date()` when the timeframe type is changed.
+  - Ensured `currentPeriodReferenceDate` is passed to `fetchDataAndProcessBalances` and `processBalances` where needed.
+- **UI in `components/SummaryDisplay.tsx`:**
+  - Added "Previous" (`<`) and "Next" (`>`) navigation buttons.
+  - Implemented logic to display the currently viewed period (e.g., "Mar 2023", "Week of Mar 6 - Mar 12") based on `currentPeriodReferenceDate` and `currentTimeframe`.
+  - Added basic logic to disable the "Next" button if it would navigate into a future period.
+- **Prop Drilling & Bug Fixes:**
+  - Updated `DashboardProps` in `app/dashboard.tsx` to include new props for period navigation.
+  - Ensured these new props (`currentPeriodReferenceDate`, `onPreviousPeriod`, `onNextPeriod`) are correctly passed from `app/index.tsx` through `app/dashboard.tsx` to `components/SummaryDisplay.tsx`, resolving a runtime error.
+  - Corrected a variable scope issue for `const today = new Date()` within `processBalances` in `app/index.tsx` for accurate end-date capping in 'Monthly' and 'Yearly' views.

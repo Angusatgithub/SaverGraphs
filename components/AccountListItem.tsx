@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   accountItemSelected: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#007AFF',
     backgroundColor: '#23234A',
   },
