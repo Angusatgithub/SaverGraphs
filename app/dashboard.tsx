@@ -1,192 +1,136 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import AccountFilterModal from '../components/AccountFilterModal';
+import { ScrollView, StyleSheet } from 'react-native';
+import AccountSelector from '../components/AccountSelector';
 import BalanceChart from '../components/BalanceChart';
-import ErrorMessage from '../components/ErrorMessage';
-import SuccessMessage from '../components/SuccessMessage';
-import { ThemedText } from '../components/ThemedText';
-import { ThemedView } from '../components/ThemedView';
-import TimeframeSelectionModal, { TimeframeOption } from '../components/TimeframeSelectionModal';
-import { useThemeColor } from '../hooks/useThemeColor';
-import { BalanceSummary } from '../utils/balanceHelpers';
+import DashboardHeader from '../components/DashboardHeader';
+import SummaryDisplay from '../components/SummaryDisplay';
+import TimeframeSelectionModal, { Timeframe } from '../components/TimeframeSelectionModal';
 import { UpAccount } from './services/upApi';
 
 interface DashboardProps {
-  apiKey: string | null;
-  accounts: UpAccount[] | null;
-  transactionSummary: Record<string, number> | null;
-  balanceSummary: BalanceSummary | null;
+  accounts: UpAccount[];
+  transactionSummary: Record<string, number>;
+  balanceSummary: { dates: string[]; balances: number[] };
   isLoading: boolean;
-  error: string | null;
-  successMessage: string | null;
   selectedAccountIdsForChart: string[];
-  onAccountSelectionChange: (selectedIds: string[]) => void;
+  onAccountSelectionChange: (newSelectedAccountIds: string[]) => void;
   onRefreshData: () => Promise<void>;
-  currentTimeframe: TimeframeOption;
-  onTimeframeSelect: (timeframe: TimeframeOption) => void;
+  currentTimeframe: Timeframe;
+  onTimeframeChange: (timeframe: Timeframe) => void;
 }
 
-export default function DashboardScreen({
-  apiKey,
-  accounts,
-  transactionSummary,
-  balanceSummary,
+export default function Dashboard({ 
+  accounts, 
+  transactionSummary, 
+  balanceSummary, 
   isLoading,
-  error,
-  successMessage,
   selectedAccountIdsForChart,
   onAccountSelectionChange,
   onRefreshData,
   currentTimeframe,
-  onTimeframeSelect,
+  onTimeframeChange
 }: DashboardProps) {
-  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const totalAccounts = accounts.length;
+  const totalTransactions = Object.values(transactionSummary).reduce((sum, count) => sum + count, 0);
   const [isTimeframeModalVisible, setIsTimeframeModalVisible] = useState(false);
 
-  const backgroundColor = useThemeColor({}, 'background');
-  const buttonBackgroundColor = useThemeColor({}, 'icon');
-  const buttonTextColor = useThemeColor({}, 'text');
-
-  const totalAccounts = accounts ? accounts.length : 0;
-  const totalTransactions = transactionSummary ? Object.values(transactionSummary).reduce((sum, count) => sum + count, 0) : 0;
-  const lastBalance = balanceSummary && balanceSummary.balances.length > 0 
+  const lastBalance = balanceSummary.balances.length > 0 
     ? balanceSummary.balances[balanceSummary.balances.length - 1].toFixed(2) 
     : 'N/A';
 
-  const handleModalAccountSelectionChange = (newSelectedAccountIds: string[]) => {
-    onAccountSelectionChange(newSelectedAccountIds);
+  // Calculate overview stats based on selected accounts
+  const selectedAccounts = accounts.filter(acc => selectedAccountIdsForChart.includes(acc.id));
+  const totalSelectedAccounts = selectedAccounts.length;
+  const totalSelectedTransactions = selectedAccountIdsForChart.reduce(
+    (sum, id) => sum + (transactionSummary[id] || 0),
+    0
+  );
+
+  // Helper to get timeframe label
+  const getTimeframeLabel = (timeframe: Timeframe) => {
+    switch (timeframe) {
+      case 'Monthly':
+        return 'Monthly';
+      case 'Yearly':
+        return 'Yearly';
+      case 'Weekly':
+        return 'Weekly';
+      default:
+        return 'last 90 days';
+    }
+  };
+  const timeframeLabel = getTimeframeLabel(currentTimeframe);
+
+  // Helper to get transactions label
+  const getTransactionsLabel = (timeframe: Timeframe) => {
+    switch (timeframe) {
+      case 'Monthly':
+        return 'Transactions this Month';
+      case 'Yearly':
+        return 'Transactions this Year';
+      case 'Weekly':
+        return 'Transactions this Week';
+      default:
+        return 'Transactions (last 90 days)';
+    }
+  };
+  const transactionsLabel = getTransactionsLabel(currentTimeframe);
+
+  // Handler for toggling account selection
+  const handleAccountToggle = (accountId: string) => {
+    let newSelected: string[];
+    if (selectedAccountIdsForChart.includes(accountId)) {
+      newSelected = selectedAccountIdsForChart.filter(id => id !== accountId);
+    } else {
+      newSelected = [...selectedAccountIdsForChart, accountId];
+    }
+    onAccountSelectionChange(newSelected);
   };
 
-  const filterButtonStyle = [
-    styles.button,
-    styles.filterButton,
-    { backgroundColor: buttonBackgroundColor },
-    (isLoading || !accounts || accounts.length === 0) && styles.disabledButton
-  ];
-
-  const refreshButtonStyle = [
-    styles.button,
-    styles.refreshButton,
-    { backgroundColor: buttonBackgroundColor },
-    isLoading && styles.disabledButton
-  ];
-
-  const timeframeButtonStyle = [
-    styles.button,
-    styles.timeframeButton,
-    { backgroundColor: buttonBackgroundColor },
-    isLoading && styles.disabledButton
-  ];
-
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
-      <ScrollView contentContainerStyle={styles.scrollContentContainer}>
-        {successMessage && (
-          <View style={styles.messageContainer}>
-            <SuccessMessage message={successMessage} onDismiss={() => { /* Handled in index.tsx */ }} />
-          </View>
-        )}
-        {error && !successMessage && (
-          <View style={styles.messageContainer}>
-            <ErrorMessage message={error} />
-          </View>
-        )}
-
-        {apiKey && (
-          <View style={styles.contentContainer}>
-            <ThemedText type="title" style={styles.dashboardTitle}>Your Savings Dashboard</ThemedText>
-            
-            <View style={styles.summaryBox}>
-              <ThemedText style={styles.summaryText}>Total Saver Accounts: {totalAccounts}</ThemedText>
-              <ThemedText style={styles.summaryText}>Total Transactions (90d): {totalTransactions}</ThemedText>
-              <ThemedText style={styles.summaryText}>Latest Aggregated Balance: ${lastBalance}</ThemedText>
-            </View>
-
-            <View style={styles.actionButtonsContainer}>
-              <TouchableOpacity
-                style={filterButtonStyle}
-                onPress={() => setIsFilterModalVisible(true)}
-                disabled={isLoading || !accounts || accounts.length === 0}
-              >
-                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>Filter Accounts</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={refreshButtonStyle}
-                onPress={onRefreshData}
-                disabled={isLoading}
-              >
-                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
-                  {isLoading ? 'Refreshing...' : 'Refresh Data'}
-                </ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={timeframeButtonStyle}
-                onPress={() => setIsTimeframeModalVisible(true)}
-                disabled={isLoading}
-              >
-                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
-                  Timeframe: {currentTimeframe}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.chartContainer}>
-              <BalanceChart 
-                dates={balanceSummary?.dates || []} 
-                balances={balanceSummary?.balances || []} 
-                isLoading={isLoading && !balanceSummary}
-              />
-            </View>
-
-          </View>
-        )}
-      </ScrollView>
-      
-      <AccountFilterModal
-        isVisible={isFilterModalVisible}
-        onClose={() => setIsFilterModalVisible(false)}
-        accounts={accounts || []}
-        initiallySelectedAccountIds={selectedAccountIdsForChart}
-        onSelectionChange={handleModalAccountSelectionChange}
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <DashboardHeader 
+        title="Savers over time"
+        isLoading={isLoading}
+        onRefresh={onRefreshData}
       />
-      <TimeframeSelectionModal 
+
+      <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} isLoading={isLoading} />
+
+      <SummaryDisplay
+        totalSelectedAccounts={totalSelectedAccounts}
+        currentTimeframe={currentTimeframe}
+        lastBalance={lastBalance}
+        transactionsLabel={transactionsLabel}
+        totalSelectedTransactions={totalSelectedTransactions}
+        daysWithData={balanceSummary.dates.length}
+        onOpenTimeframeModal={() => setIsTimeframeModalVisible(true)}
+      />
+
+      <AccountSelector 
+        accounts={accounts}
+        selectedAccountIds={selectedAccountIdsForChart}
+        onAccountToggle={handleAccountToggle}
+      />
+
+      <TimeframeSelectionModal
         isVisible={isTimeframeModalVisible}
         onClose={() => setIsTimeframeModalVisible(false)}
         currentTimeframe={currentTimeframe}
-        onTimeframeSelect={onTimeframeSelect}
+        onTimeframeSelect={onTimeframeChange}
       />
-    </ThemedView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollContentContainer: {
-    paddingBottom: 20,
-  },
-  messageContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
+    backgroundColor: '#0A0A0A',
+    padding: 16,
   },
   contentContainer: {
-    paddingHorizontal: 16,
-  },
-  dashboardTitle: {
-    marginVertical: 20,
-    textAlign: 'center',
-  },
-  summaryBox: {
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  summaryText: {
-    fontSize: 16,
-    marginBottom: 8,
+    paddingBottom: 20,
   },
   actionButtonsContainer: {
     flexDirection: 'row',
@@ -195,28 +139,18 @@ const styles = StyleSheet.create({
   },
   button: {
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 15,
     borderRadius: 8,
     alignItems: 'center',
-    minWidth: 100,
-  },
-  buttonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  filterButton: {
-    backgroundColor: '#2C2C2E',
-  },
-  refreshButton: {
-    backgroundColor: '#007AFF',
+    flex: 1,
+    marginHorizontal: 5,
   },
   timeframeButton: {
     backgroundColor: '#5856D6',
   },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  chartContainer: {
-    // Styles for the container of the BalanceChart if needed
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

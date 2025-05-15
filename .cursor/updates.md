@@ -359,31 +359,26 @@ alwaysApply: false
 ## May 17, 2024 - Display Timeframe Selection Button (Story 4.6)
 
 ### Story 4.6: Display Timeframe Selection Button
-- Added a "Timeframe: Monthly" button to the `DashboardScreen` (`app/dashboard.tsx`).
-- The button is positioned in the row of action buttons (Filter, Refresh, Timeframe).
-- It uses `TouchableOpacity` and `ThemedText` for consistent styling.
-- On press, it currently logs to console; modal integration will be in Story 4.7.
+- Modified `app/dashboard.tsx`:
+  - Added a new "Timeframe: [Current]" button to the `actionButtonsContainer` alongside the Filter and Refresh buttons.
+  - Updated `DashboardProps` to accept `currentTimeframe: 'Monthly' | 'All'`.
+  - The button's text dynamically displays the current timeframe (e.g., "Timeframe: Monthly").
+  - Added basic styling for the `timeframeButton`.
+  - The `onPress` action currently logs a message; actual timeframe selection UI and logic will be handled in Story 4.7.
+- Modified `app/index.tsx`:
+  - Passed the `currentTimeframe` state to the `Dashboard` component as a prop.
+- This makes a button visible for users to eventually change the graph's timeframe.
 
-## May 17, 2024 - Timeframe Selection Modal (Story 4.7)
+## May 17, 2024 - Refactored `app/dashboard.tsx` by breaking it down into smaller, reusable components: `DashboardHeader`, `SummaryDisplay`, `AccountListItem`, and `AccountSelector`.
 
-### Story 4.7: Show Timeframe Options (Weekly, Monthly, Yearly)
-- Created `TimeframeSelectionModal.tsx` in `components/`:
-  - Displays options: "Weekly", "Monthly", "Yearly".
-  - Uses `useThemeColor` for styling consistent with the app theme.
-  - Highlights the `currentTimeframe` passed to it.
-  - Calls `onTimeframeSelect` prop when an option is chosen.
-- Integrated `TimeframeSelectionModal` into `app/dashboard.tsx`:
-  - Added state `isTimeframeModalVisible` to control modal visibility.
-  - The "Timeframe: ..." button now toggles this modal.
-  - Passed `currentTimeframe` and `onTimeframeSelect` (from `app/index.tsx`) to the modal.
-- Updated `app/index.tsx`:
-  - Changed `currentTimeframe` state to use `TimeframeOption` type ('Weekly' | 'Monthly' | 'Yearly') from the modal, defaulting to 'Monthly'.
-  - Implemented `handleTimeframeSelect` function to update `currentTimeframe` state.
-  - The existing `useEffect` that re-processes balances when `currentTimeframe` changes will handle graph updates (specific timeframe logic for Weekly/Yearly will be in Stories 4.8 and 4.10).
-- Refactored component locations for consistency:
-  - Moved `ErrorMessage.tsx`, `SuccessMessage.tsx`, `ApiKeyInput.tsx`, and `DebugPanel.tsx` from `app/components/` to the root `components/` directory.
-  - Updated all relevant import paths in `app/index.tsx` and `app/dashboard.tsx`.
-  - Created `components/ThemedView.tsx` and `components/ThemedText.tsx` as they were missing, causing import errors.
-  - Refactored `ApiKeyInput.tsx` and `DebugPanel.tsx` to use `useThemeColor`.
-- Corrected `ThemedText` import in `components/AccountFilterModal.tsx` to be a named import.
-- Ran `npx tsc --noEmit` to verify type correctness of the main application code (ignoring `app-example` errors).
+### Story 4.7: Implement Timeframe Selection Logic
+- Modified `app/index.tsx`:
+  - Added a new state `currentTimeframe`, defaulting to `'Monthly'`.
+  - Modified `processBalances` to accept `currentTimeframe` as a parameter.
+  - Updated `processBalances` to use the new `currentTimeframe` state.
+- Modified `app/dashboard.tsx`:
+  - Added a new state `currentTimeframe`, defaulting to `'Monthly'`.
+  - Updated `processBalances` to use the new `currentTimeframe` state.
+- Created new files for these components in the `components` directory: `DashboardHeader`, `SummaryDisplay`, `AccountListItem`, and `AccountSelector`.
+- Moved relevant JSX, logic, and styles to the new component files.
+- Updated `app/dashboard.tsx` to import and use these new components, reducing its complexity and improving maintainability.

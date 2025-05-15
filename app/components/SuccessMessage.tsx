@@ -1,43 +1,39 @@
+import { ThemedText } from '@/components/ThemedText';
 import React, { useEffect } from 'react';
 import { Animated, StyleSheet } from 'react-native';
-import { ThemedText } from './ThemedText'; // Adjusted path for ThemedText
 
 interface SuccessMessageProps {
   message: string;
-  onDismiss?: () => void; // Renamed onComplete to onDismiss to match usage in app/index.tsx
+  onComplete?: () => void;
 }
 
-export default function SuccessMessage({ message, onDismiss }: SuccessMessageProps) {
+export default function SuccessMessage({ message, onComplete }: SuccessMessageProps) {
   const opacity = new Animated.Value(0);
 
   useEffect(() => {
-    if (!message) {
-      // Ensure opacity is 0 if there's no message initially or it's cleared
-      opacity.setValue(0);
-      return;
-    }
+    if (!message) return;
 
-    opacity.setValue(0); // Reset opacity before fading in for new messages
+    // Fade in
     Animated.sequence([
       Animated.timing(opacity, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }),
+      // Hold for 1.5 seconds
       Animated.delay(1500),
+      // Fade out
       Animated.timing(opacity, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }),
     ]).start(() => {
-      onDismiss?.();
+      onComplete?.();
     });
-  }, [message, onDismiss, opacity]); // Added opacity to dependency array as it's used in setValue
+  }, [message, onComplete]);
 
-  // Do not render if message is null or empty to allow fade-out to complete before disappearing
-  // The animated opacity will handle visibility.
-  // if (!message) return null; // This was causing abrupt disappearance
+  if (!message) return null;
 
   return (
     <Animated.View style={[styles.container, { opacity }]}>

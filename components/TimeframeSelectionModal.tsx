@@ -1,16 +1,17 @@
 import React from 'react';
 import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useThemeColor } from '../hooks/useThemeColor';
-import { ThemedText } from './ThemedText';
+import ThemedText from './ThemedText';
 
-export type TimeframeOption = 'Weekly' | 'Monthly' | 'Yearly';
+export type Timeframe = 'Weekly' | 'Monthly' | 'Yearly' | 'All'; // Extended Timeframe type
 
 interface TimeframeSelectionModalProps {
   isVisible: boolean;
   onClose: () => void;
-  currentTimeframe: TimeframeOption;
-  onTimeframeSelect: (timeframe: TimeframeOption) => void;
+  currentTimeframe: Timeframe;
+  onTimeframeSelect: (timeframe: Timeframe) => void;
 }
+
+const TIMEFRAME_OPTIONS: Timeframe[] = ['Weekly', 'Monthly', 'Yearly', 'All']; // 'All' could be 90-day view
 
 export default function TimeframeSelectionModal({
   isVisible,
@@ -18,13 +19,10 @@ export default function TimeframeSelectionModal({
   currentTimeframe,
   onTimeframeSelect,
 }: TimeframeSelectionModalProps) {
-  const timeframes: TimeframeOption[] = ['Weekly', 'Monthly', 'Yearly'];
-
-  const modalBackgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
-  const unselectedOptionBackgroundColor = useThemeColor({}, 'icon'); // Using 'icon' for unselected buttons
-  const selectedOptionBackgroundColor = useThemeColor({}, 'tint');   // Using 'tint' for selected/primary action
-  const cancelButtonBackgroundColor = useThemeColor({}, 'icon'); // Using 'icon' for cancel button for less prominence
+  const handleSelect = (timeframe: Timeframe) => {
+    onTimeframeSelect(timeframe);
+    onClose();
+  };
 
   return (
     <Modal
@@ -34,36 +32,32 @@ export default function TimeframeSelectionModal({
       onRequestClose={onClose}
     >
       <View style={styles.centeredView}>
-        <View style={[styles.modalView, { backgroundColor: modalBackgroundColor }]}>
-          <ThemedText type="title" style={[styles.modalTitle, { color: textColor }]}>Select Timeframe</ThemedText>
-          {timeframes.map((timeframe) => (
+        <View style={styles.modalView}>
+          <ThemedText type="subtitle" style={styles.modalTitle}>Select Timeframe</ThemedText>
+          {TIMEFRAME_OPTIONS.map((option) => (
             <TouchableOpacity
-              key={timeframe}
+              key={option}
               style={[
                 styles.optionButton,
-                { backgroundColor: currentTimeframe === timeframe ? selectedOptionBackgroundColor : unselectedOptionBackgroundColor },
+                option === currentTimeframe && styles.selectedOptionButton,
               ]}
-              onPress={() => {
-                onTimeframeSelect(timeframe);
-                onClose();
-              }}
+              onPress={() => handleSelect(option)}
             >
-              <ThemedText
+              <ThemedText 
                 style={[
-                  styles.optionText,
-                  { color: textColor }, // Standard text color for options
-                  currentTimeframe === timeframe && styles.selectedOptionText, // Bold for selected
+                    styles.optionText,
+                    option === currentTimeframe && styles.selectedOptionText
                 ]}
               >
-                {timeframe}
+                {option}
               </ThemedText>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
-            style={[styles.button, styles.doneButton, { backgroundColor: cancelButtonBackgroundColor }]}
-            onPress={onClose}
+            style={[styles.button, styles.buttonClose]}
+            onPress={onClose} // Simple close button
           >
-            <ThemedText style={[styles.buttonText, { color: textColor }]}>Cancel</ThemedText>
+            <ThemedText style={styles.textStyle}>Cancel</ThemedText>
           </TouchableOpacity>
         </View>
       </View>
@@ -76,12 +70,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)', // Semi-transparent background
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   modalView: {
-    margin: 20,
+    width: '80%',
+    backgroundColor: '#1E1E1E',
     borderRadius: 20,
-    padding: 35,
+    padding: 25,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
@@ -91,38 +86,47 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    width: '80%',
   },
   modalTitle: {
     marginBottom: 20,
     textAlign: 'center',
+    color: '#FFFFFF',
   },
   optionButton: {
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    marginBottom: 10,
     width: '100%',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: '#2C2C2E',
+    marginBottom: 10,
     alignItems: 'center',
+  },
+  selectedOptionButton: {
+    backgroundColor: '#007AFF',
+  },
+  optionText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '500',
   },
   selectedOptionText: {
     fontWeight: 'bold',
   },
   button: {
     borderRadius: 10,
-    padding: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     elevation: 2,
-    marginTop: 15,
-    width: '100%',
-    alignItems: 'center',
+    marginTop: 10,
+    minWidth: 100,
   },
-  doneButton: { // Kept for structure, specific color set by useThemeColor
+  buttonClose: {
+    backgroundColor: '#555555', // Darker grey for cancel
   },
-  buttonText: {
+  textStyle: {
+    color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
-  },
-  optionText: {
     fontSize: 16,
   },
 }); 
