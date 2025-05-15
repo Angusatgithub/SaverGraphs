@@ -1,126 +1,222 @@
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import AccountFilterModal from '../components/AccountFilterModal';
 import BalanceChart from '../components/BalanceChart';
-import ThemedText from '../components/ThemedText';
+import ErrorMessage from '../components/ErrorMessage';
+import SuccessMessage from '../components/SuccessMessage';
+import { ThemedText } from '../components/ThemedText';
+import { ThemedView } from '../components/ThemedView';
+import TimeframeSelectionModal, { TimeframeOption } from '../components/TimeframeSelectionModal';
+import { useThemeColor } from '../hooks/useThemeColor';
+import { BalanceSummary } from '../utils/balanceHelpers';
 import { UpAccount } from './services/upApi';
 
 interface DashboardProps {
-  accounts: UpAccount[];
-  transactionSummary: Record<string, number>;
-  balanceSummary: { dates: string[]; balances: number[] };
+  apiKey: string | null;
+  accounts: UpAccount[] | null;
+  transactionSummary: Record<string, number> | null;
+  balanceSummary: BalanceSummary | null;
   isLoading: boolean;
-  // currentTotalBalance: string | null; // No longer needed with revised balanceSummary
+  error: string | null;
+  successMessage: string | null;
+  selectedAccountIdsForChart: string[];
+  onAccountSelectionChange: (selectedIds: string[]) => void;
+  onRefreshData: () => Promise<void>;
+  currentTimeframe: TimeframeOption;
+  onTimeframeSelect: (timeframe: TimeframeOption) => void;
 }
 
-export default function Dashboard({ accounts, transactionSummary, balanceSummary, isLoading }: DashboardProps) {
-  const totalAccounts = accounts.length;
-  const totalTransactions = Object.values(transactionSummary).reduce((sum, count) => sum + count, 0);
+export default function DashboardScreen({
+  apiKey,
+  accounts,
+  transactionSummary,
+  balanceSummary,
+  isLoading,
+  error,
+  successMessage,
+  selectedAccountIdsForChart,
+  onAccountSelectionChange,
+  onRefreshData,
+  currentTimeframe,
+  onTimeframeSelect,
+}: DashboardProps) {
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [isTimeframeModalVisible, setIsTimeframeModalVisible] = useState(false);
 
-  const lastBalance = balanceSummary.balances.length > 0 
+  const backgroundColor = useThemeColor({}, 'background');
+  const buttonBackgroundColor = useThemeColor({}, 'icon');
+  const buttonTextColor = useThemeColor({}, 'text');
+
+  const totalAccounts = accounts ? accounts.length : 0;
+  const totalTransactions = transactionSummary ? Object.values(transactionSummary).reduce((sum, count) => sum + count, 0) : 0;
+  const lastBalance = balanceSummary && balanceSummary.balances.length > 0 
     ? balanceSummary.balances[balanceSummary.balances.length - 1].toFixed(2) 
     : 'N/A';
 
+  const handleModalAccountSelectionChange = (newSelectedAccountIds: string[]) => {
+    onAccountSelectionChange(newSelectedAccountIds);
+  };
+
+  const filterButtonStyle = [
+    styles.button,
+    styles.filterButton,
+    { backgroundColor: buttonBackgroundColor },
+    (isLoading || !accounts || accounts.length === 0) && styles.disabledButton
+  ];
+
+  const refreshButtonStyle = [
+    styles.button,
+    styles.refreshButton,
+    { backgroundColor: buttonBackgroundColor },
+    isLoading && styles.disabledButton
+  ];
+
+  const timeframeButtonStyle = [
+    styles.button,
+    styles.timeframeButton,
+    { backgroundColor: buttonBackgroundColor },
+    isLoading && styles.disabledButton
+  ];
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <ThemedText type="title" style={styles.title}>Your Savings Accounts</ThemedText>
+    <ThemedView style={[styles.container, { backgroundColor }]}>
+      <ScrollView contentContainerStyle={styles.scrollContentContainer}>
+        {successMessage && (
+          <View style={styles.messageContainer}>
+            <SuccessMessage message={successMessage} onDismiss={() => { /* Handled in index.tsx */ }} />
+          </View>
+        )}
+        {error && !successMessage && (
+          <View style={styles.messageContainer}>
+            <ErrorMessage message={error} />
+          </View>
+        )}
+
+        {apiKey && (
+          <View style={styles.contentContainer}>
+            <ThemedText type="title" style={styles.dashboardTitle}>Your Savings Dashboard</ThemedText>
+            
+            <View style={styles.summaryBox}>
+              <ThemedText style={styles.summaryText}>Total Saver Accounts: {totalAccounts}</ThemedText>
+              <ThemedText style={styles.summaryText}>Total Transactions (90d): {totalTransactions}</ThemedText>
+              <ThemedText style={styles.summaryText}>Latest Aggregated Balance: ${lastBalance}</ThemedText>
+            </View>
+
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity
+                style={filterButtonStyle}
+                onPress={() => setIsFilterModalVisible(true)}
+                disabled={isLoading || !accounts || accounts.length === 0}
+              >
+                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>Filter Accounts</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={refreshButtonStyle}
+                onPress={onRefreshData}
+                disabled={isLoading}
+              >
+                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
+                  {isLoading ? 'Refreshing...' : 'Refresh Data'}
+                </ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={timeframeButtonStyle}
+                onPress={() => setIsTimeframeModalVisible(true)}
+                disabled={isLoading}
+              >
+                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
+                  Timeframe: {currentTimeframe}
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.chartContainer}>
+              <BalanceChart 
+                dates={balanceSummary?.dates || []} 
+                balances={balanceSummary?.balances || []} 
+                isLoading={isLoading && !balanceSummary}
+              />
+            </View>
+
+          </View>
+        )}
+      </ScrollView>
       
-      <View style={styles.summaryBox}>
-        <ThemedText type="subtitle">Overview</ThemedText>
-        <ThemedText style={styles.summaryText}>Current Total Balance: ${lastBalance}</ThemedText>
-        <ThemedText style={styles.summaryText}>Total Saver Accounts: {totalAccounts}</ThemedText>
-        <ThemedText style={styles.summaryText}>Total Transactions (last 90 days): {totalTransactions}</ThemedText>
-        <ThemedText style={styles.summaryText}>{balanceSummary.dates.length} days with transaction data</ThemedText>
-      </View>
-
-      {/* Filter Accounts Button */} 
-      <TouchableOpacity 
-        style={styles.filterButton}
-        onPress={() => console.log('Filter Accounts button pressed')}
-      >
-        <ThemedText style={styles.filterButtonText}>Filter Accounts</ThemedText>
-      </TouchableOpacity>
-
-      <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} isLoading={isLoading} />
-
-      {accounts.map((account) => (
-        <View key={account.id} style={styles.accountItem}>
-          <ThemedText type="defaultSemiBold" style={styles.accountName}>{account.attributes.displayName}</ThemedText>
-          <ThemedText style={styles.accountDetail}>Type: {account.attributes.accountType}</ThemedText>
-          <ThemedText style={styles.accountDetail}>Balance: ${account.attributes.balance.value} {account.attributes.balance.currencyCode}</ThemedText>
-          <ThemedText style={styles.transactionCount}>Transactions (last 90d): {transactionSummary[account.id] || 0}</ThemedText>
-        </View>
-      ))}
-    </ScrollView>
+      <AccountFilterModal
+        isVisible={isFilterModalVisible}
+        onClose={() => setIsFilterModalVisible(false)}
+        accounts={accounts || []}
+        initiallySelectedAccountIds={selectedAccountIdsForChart}
+        onSelectionChange={handleModalAccountSelectionChange}
+      />
+      <TimeframeSelectionModal 
+        isVisible={isTimeframeModalVisible}
+        onClose={() => setIsTimeframeModalVisible(false)}
+        currentTimeframe={currentTimeframe}
+        onTimeframeSelect={onTimeframeSelect}
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
-    padding: 16,
   },
-  contentContainer: {
+  scrollContentContainer: {
     paddingBottom: 20,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#FFFFFF',
+  messageContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  contentContainer: {
+    paddingHorizontal: 16,
+  },
+  dashboardTitle: {
+    marginVertical: 20,
+    textAlign: 'center',
   },
   summaryBox: {
-    backgroundColor: '#1C1C1E',
     padding: 15,
-    borderRadius: 10,
+    borderRadius: 8,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
   },
   summaryText: {
     fontSize: 16,
     marginBottom: 8,
-    color: '#E5E5E7',
   },
-  accountItem: {
-    backgroundColor: '#1C1C1E',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1.5,
-    elevation: 2,
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
   },
-  accountName: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  accountDetail: {
-    fontSize: 14,
-    color: '#AEAEB2',
-    marginBottom: 2,
-  },
-  transactionCount: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginTop: 4,
-  },
-  filterButton: {
-    backgroundColor: '#2C2C2E', // A slightly different shade for buttons
+  button: {
     paddingVertical: 10,
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 20, // Space before the chart
+    minWidth: 100,
   },
-  filterButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  buttonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  filterButton: {
+    backgroundColor: '#2C2C2E',
+  },
+  refreshButton: {
+    backgroundColor: '#007AFF',
+  },
+  timeframeButton: {
+    backgroundColor: '#5856D6',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  chartContainer: {
+    // Styles for the container of the BalanceChart if needed
   },
 }); 

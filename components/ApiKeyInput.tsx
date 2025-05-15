@@ -1,15 +1,29 @@
-import { ThemedText } from '@/components/ThemedText';
 import React, { useState } from 'react';
 import { Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useThemeColor } from '../hooks/useThemeColor';
+import { ThemedText } from './ThemedText';
 
 interface ApiKeyInputProps {
   onSubmit?: (apiKey: string) => void;
   isLoading?: boolean;
+  initialApiKey?: string;
 }
 
-export default function ApiKeyInput({ onSubmit, isLoading }: ApiKeyInputProps) {
-  const [apiKey, setApiKey] = useState('');
+export default function ApiKeyInput({ onSubmit, isLoading, initialApiKey = '' }: ApiKeyInputProps) {
+  const [apiKey, setApiKey] = useState(initialApiKey);
   const [error, setError] = useState('');
+
+  // Theme colors
+  const themedBackgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const placeholderColor = useThemeColor({}, 'icon');
+  const inputBackgroundColor = useThemeColor({}, 'icon');
+  const inputBorderColor = useThemeColor({}, 'icon');
+  const errorColor = useThemeColor({}, 'tint');
+  const primaryActionColor = useThemeColor({}, 'tint');
+  const buttonTextColor = useThemeColor({}, 'background');
+  const disabledColor = useThemeColor({}, 'icon');
+  const helperTextColor = useThemeColor({}, 'icon');
 
   const validateKeyFormat = (key: string) => {
     const cleanKey = key.trim().replace(/\s+/g, '');
@@ -34,7 +48,12 @@ export default function ApiKeyInput({ onSubmit, isLoading }: ApiKeyInputProps) {
 
   const handleSubmit = () => {
     const cleanKey = apiKey.trim();
-    if (cleanKey && !error && onSubmit) {
+    const validationError = validateKeyFormat(cleanKey);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (cleanKey && onSubmit) {
       onSubmit(cleanKey);
     }
   };
@@ -44,12 +63,15 @@ export default function ApiKeyInput({ onSubmit, isLoading }: ApiKeyInputProps) {
   };
 
   return (
-    <View style={styles.container}>
-      <ThemedText style={styles.label}>Enter your Up API Key</ThemedText>
+    <View style={[styles.container, { backgroundColor: themedBackgroundColor }]}>
+      <ThemedText style={[styles.label, { color: textColor }]}>Enter your Up API Key</ThemedText>
       <TextInput
-        style={[styles.input, error && styles.inputError]}
+        style={[
+          styles.input,
+          { backgroundColor: inputBackgroundColor, color: textColor, borderColor: error ? errorColor : inputBorderColor },
+        ]}
         placeholder="up:yeah:yourtoken"
-        placeholderTextColor="#666"
+        placeholderTextColor={placeholderColor}
         value={apiKey}
         onChangeText={handleChangeText}
         secureTextEntry
@@ -58,11 +80,11 @@ export default function ApiKeyInput({ onSubmit, isLoading }: ApiKeyInputProps) {
         editable={!isLoading}
       />
       {error ? (
-        <ThemedText style={styles.errorText}>{error}</ThemedText>
+        <ThemedText style={[styles.errorText, { color: errorColor }]}>{error}</ThemedText>
       ) : (
-        <ThemedText style={styles.helperText}>
+        <ThemedText style={[styles.helperText, { color: helperTextColor }]}>
           Enter your Personal Access Token from your Up developer settings, including the "up:yeah:" prefix.{' '}
-          <ThemedText style={styles.link} onPress={openUpDocs}>
+          <ThemedText style={[styles.link, { color: primaryActionColor }]} onPress={openUpDocs}>
             Learn how to get one
           </ThemedText>
         </ThemedText>
@@ -70,13 +92,13 @@ export default function ApiKeyInput({ onSubmit, isLoading }: ApiKeyInputProps) {
       <Pressable
         style={({ pressed }) => [
           styles.button,
+          { backgroundColor: (isLoading || !!error || !apiKey.trim()) ? disabledColor : primaryActionColor },
           pressed && styles.buttonPressed,
-          (isLoading || error) && styles.buttonDisabled,
         ]}
         onPress={handleSubmit}
         disabled={!apiKey.trim() || !!error || isLoading}
       >
-        <ThemedText style={styles.buttonText}>
+        <ThemedText style={[styles.buttonText, {color: buttonTextColor }]}>
           {isLoading ? 'Connecting...' : 'Connect'}
         </ThemedText>
       </Pressable>
@@ -93,43 +115,30 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#1A1A1A',
-    color: '#FFFFFF',
     padding: 12,
     borderRadius: 8,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#333',
     marginBottom: 8,
-  },
-  inputError: {
-    borderColor: '#FF4B4B',
   },
   helperText: {
     fontSize: 14,
-    color: '#999',
     marginBottom: 16,
   },
   errorText: {
     fontSize: 14,
-    color: '#FF4B4B',
     marginBottom: 16,
   },
   link: {
-    color: '#FF4B4B',
     textDecorationLine: 'underline',
   },
   button: {
-    backgroundColor: '#FF4B4B',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
   buttonPressed: {
     opacity: 0.8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#666',
   },
   buttonText: {
     fontSize: 16,

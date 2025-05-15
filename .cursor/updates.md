@@ -274,3 +274,116 @@ alwaysApply: false
 - The button is implemented using `TouchableOpacity` and `ThemedText` for styling consistent with the app theme.
 - Positioned the button between the summary overview box and the balance chart.
 - On press, the button currently logs a message to the console. Actual filter UI and logic will follow in subsequent stories.
+
+## May 16, 2024 - Account Filter Modal UI (Story 4.2)
+
+### Story 4.2: Show List of Savings Accounts for Filtering
+- Created `AccountFilterModal.tsx` component in `components/`.
+  - The modal takes `isVisible`, `onClose`, and `accounts` (list of `UpAccount`) as props.
+  - It uses React Native's `Modal` component, styled for a dark theme.
+  - It displays a list of savings accounts, each with its display name and a `Switch` toggle.
+  - For this story, all switches default to an "on" state; their state management will be handled in Story 4.3.
+  - A "Done" button is included in the modal to close it.
+- Modified `app/dashboard.tsx`:
+  - Added state (`isFilterModalVisible`) to manage the visibility of the filter modal.
+  - Updated the "Filter Accounts" button's `onPress` handler to set `isFilterModalVisible` to true.
+  - Rendered the `AccountFilterModal`, passing the visibility state, `onClose` handler, and the list of accounts.
+
+## May 17, 2024 - Account Filter Toggle Logic (Story 4.3)
+
+### Story 4.3: Implement Account Toggle Functionality
+- Modified `components/AccountFilterModal.tsx`:
+  - Added `initiallySelectedAccountIds` (optional) and `onSelectionChange` props.
+  - Implemented internal state `selectedAccountIds`, initialized with `initiallySelectedAccountIds` or defaults to all account IDs if the prop is not provided.
+  - Added a `useEffect` hook to reset `selectedAccountIds` if `isVisible`, `accounts`, or `initiallySelectedAccountIds` props change, ensuring the modal reflects the correct state when opened.
+  - The `Switch` component for each account now derives its `value` from whether the account ID is in `selectedAccountIds`.
+  - `onValueChange` for each `Switch` updates the `selectedAccountIds` state (toggling the specific account ID).
+  - The "Done" button now calls `onSelectionChange` with the current `selectedAccountIds` before calling `onClose`.
+- Modified `app/dashboard.tsx`:
+  - Added state `selectedAccountIdsForChart`, initialized to all account IDs.
+  - Added a `useEffect` hook to reset `selectedAccountIdsForChart` to all account IDs if the main `accounts` prop changes.
+  - Passed `selectedAccountIdsForChart` as `initiallySelectedAccountIds` to `AccountFilterModal`.
+  - Implemented `handleAccountSelectionChange` which updates `selectedAccountIdsForChart` based on the callback from the modal.
+  - Currently logs the selected IDs; actual data filtering for the chart using these IDs will be done in Story 4.4.
+- This allows users to toggle account selections in the modal, and the selections are communicated back to the dashboard screen, fulfilling the requirements of Story 4.3.
+
+## May 17, 2024 - Update Graph on Account Filter Change (Story 4.4)
+
+### Story 4.4: Update Graph on Account Filter Change
+- Modified `app/index.tsx`:
+  - Lifted `selectedAccountIdsForChart` state and `handleAccountSelectionChange` logic from `app/dashboard.tsx` to `app/index.tsx`.
+  - Created a new state `allTransactions: Record<string, UpTransaction[]>` to store all fetched transactions, separating it from the summarized `transactionSummary`.
+  - Refactored data fetching into a centralized `fetchDataAndProcessBalances` async function. This function fetches accounts, then all transactions, stores them, and then calls `processBalances`.
+  - `handleApiKeySubmit` and the initial `useEffect` for stored key now call `fetchDataAndProcessBalances`. This function initializes `selectedAccountIdsForChart` to all saver accounts if it's the first load or if no specific selection was passed.
+  - Modified `processBalances` to accept `selectedAccountIds: string[]` as a parameter. It now filters both the accounts to process and the transactions used for calculations based on these selected IDs. If no accounts are selected, it returns empty data for the chart.
+  - Added a new `useEffect` hook that listens for changes in `selectedAccountIdsForChart` or `currentTimeframe`. When these change (and essential data like `apiKey`, `accounts`, `allTransactions` are available), it sets `isLoading` to true, re-calls `processBalances` with the current full set of transactions, all saver accounts, the current timeframe, and the updated `selectedAccountIdsForChart`, then updates `balanceSummary` and sets `isLoading` to false. This ensures the graph data is re-calculated and re-rendered.
+  - Passed `selectedAccountIdsForChart` and `handleAccountSelectionChange` as props to the `Dashboard` component.
+- Modified `app/dashboard.tsx`:
+  - Removed the local `selectedAccountIdsForChart` state and its `useEffect`.
+  - Updated `DashboardProps` to receive `selectedAccountIdsForChart` and `onAccountSelectionChange` from `app/index.tsx`.
+  - Passed these props to `AccountFilterModal`.
+- These changes ensure that when a user changes account selections in the filter modal, the graph updates to display data only for the selected accounts, with a loading indicator during reprocessing.
+
+## May 17, 2024 - Verify API Key Validation Failure Display (Story 1.5)
+
+### Story 1.5: Display API Key Validation Failure
+- Reviewed the existing API key validation and error handling mechanisms in `app/index.tsx` and `app/services/upApi.ts`.
+- The `handleApiKeySubmit` function in `app/index.tsx` already catches errors from `validateApiKey` (including `UpApiError` for specific failures like 401 or format issues) and sets an error message using `setError()`.
+- The `ErrorMessage` component displays this error to the user.
+- If API key validation fails, `accounts` remains `null`, and `isLoading` becomes `false`, which results in the `ApiKeyInput` component being re-displayed, allowing the user to attempt re-entry.
+- The error messages provided by `UpApiError` (e.g., for 401: "Invalid API key. Please make sure you are using a valid Up Personal Access Token...") are clear and user-friendly.
+- Conclusion: The acceptance criteria for Story 1.5 are met by the current implementation. No further code changes are required for this story.
+
+## May 17, 2024 - Implement Manual Refresh Button (Story 2.4)
+
+### Story 2.4: Implement Manual Refresh Button
+- Modified `app/dashboard.tsx` to add a "Refresh Data" button.
+- The button is placed next to the "Filter Accounts" button, achieved by wrapping both in a `View` with `flexDirection: 'row'` and `justifyContent: 'space-around'`.
+- Added generic styles for `button` and `buttonText` to be shared, and specific styles for `filterButton` and `refreshButton` for their backgrounds.
+- The `onPress` action for the "Refresh Data" button currently logs a message to the console; its full functionality will be implemented in Story 2.5.
+
+## May 17, 2024 - Trigger Data Re-fetch on Manual Refresh (Story 2.5)
+
+### Story 2.5: Trigger Data Re-fetch on Manual Refresh
+- Modified `app/index.tsx`:
+  - Created a new async function `handleRefreshData`.
+  - This function checks if `apiKey` is set. If so, it clears any existing `error` or `success` messages and calls `fetchDataAndProcessBalances` with the current `apiKey`, `selectedAccountIdsForChart`, and `currentTimeframe`. After the data is fetched and processed, it sets a "Data refreshed successfully!" message.
+  - If `apiKey` is not set, it sets an error message: "Cannot refresh data: API key is not set."
+  - Passed `handleRefreshData` as a new prop `onRefreshData` to the `Dashboard` component.
+- Modified `app/dashboard.tsx`:
+  - Updated `DashboardProps` to include `onRefreshData: () => Promise<void>`.
+  - Connected the `onPress` event of the "Refresh Data" button to this `onRefreshData` prop.
+  - The button text now changes to "Refreshing..." and is disabled when `isLoading` is true.
+- This allows the user to manually trigger a full data re-fetch and reprocessing by tapping the "Refresh Data" button, updating the displayed information.
+
+## May 17, 2024 - Display Timeframe Selection Button (Story 4.6)
+
+### Story 4.6: Display Timeframe Selection Button
+- Added a "Timeframe: Monthly" button to the `DashboardScreen` (`app/dashboard.tsx`).
+- The button is positioned in the row of action buttons (Filter, Refresh, Timeframe).
+- It uses `TouchableOpacity` and `ThemedText` for consistent styling.
+- On press, it currently logs to console; modal integration will be in Story 4.7.
+
+## May 17, 2024 - Timeframe Selection Modal (Story 4.7)
+
+### Story 4.7: Show Timeframe Options (Weekly, Monthly, Yearly)
+- Created `TimeframeSelectionModal.tsx` in `components/`:
+  - Displays options: "Weekly", "Monthly", "Yearly".
+  - Uses `useThemeColor` for styling consistent with the app theme.
+  - Highlights the `currentTimeframe` passed to it.
+  - Calls `onTimeframeSelect` prop when an option is chosen.
+- Integrated `TimeframeSelectionModal` into `app/dashboard.tsx`:
+  - Added state `isTimeframeModalVisible` to control modal visibility.
+  - The "Timeframe: ..." button now toggles this modal.
+  - Passed `currentTimeframe` and `onTimeframeSelect` (from `app/index.tsx`) to the modal.
+- Updated `app/index.tsx`:
+  - Changed `currentTimeframe` state to use `TimeframeOption` type ('Weekly' | 'Monthly' | 'Yearly') from the modal, defaulting to 'Monthly'.
+  - Implemented `handleTimeframeSelect` function to update `currentTimeframe` state.
+  - The existing `useEffect` that re-processes balances when `currentTimeframe` changes will handle graph updates (specific timeframe logic for Weekly/Yearly will be in Stories 4.8 and 4.10).
+- Refactored component locations for consistency:
+  - Moved `ErrorMessage.tsx`, `SuccessMessage.tsx`, `ApiKeyInput.tsx`, and `DebugPanel.tsx` from `app/components/` to the root `components/` directory.
+  - Updated all relevant import paths in `app/index.tsx` and `app/dashboard.tsx`.
+  - Created `components/ThemedView.tsx` and `components/ThemedText.tsx` as they were missing, causing import errors.
+  - Refactored `ApiKeyInput.tsx` and `DebugPanel.tsx` to use `useThemeColor`.
+- Corrected `ThemedText` import in `components/AccountFilterModal.tsx` to be a named import.
+- Ran `npx tsc --noEmit` to verify type correctness of the main application code (ignoring `app-example` errors).
