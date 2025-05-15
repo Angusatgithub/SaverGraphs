@@ -1,6 +1,8 @@
 import { Canvas, Line, Path } from '@shopify/react-native-skia';
 import React from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Gesture, GestureDetector, GestureUpdateEvent, PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
+import { useSharedValue } from 'react-native-reanimated';
 
 interface BalanceChartProps {
   dates: string[];
@@ -25,6 +27,36 @@ function formatDateLabel(dateStr: string): string {
 export default function BalanceChart({ dates, balances, isLoading }: BalanceChartProps) {
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = windowWidth - CHART_PADDING * 2;
+
+  const touchX = useSharedValue<number | null>(null);
+  const touchY = useSharedValue<number | null>(null);
+  const isActive = useSharedValue(false);
+
+  const panGesture = Gesture.Pan()
+    .onBegin((event: PanGestureHandlerEventPayload) => {
+      isActive.value = true;
+      touchX.value = event.x;
+      touchY.value = event.y;
+      console.log(`Gesture Begin: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`);
+    })
+    .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
+      if (isActive.value) {
+        // event.x, event.y are absolute coords within the GestureDetector view
+        touchX.value = event.x;
+        touchY.value = event.y;
+        // For Story 3.4, just log. For Story 3.5, we'll need to check if within chart bounds for callout.
+        console.log(`Gesture Update: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`);
+      }
+    })
+    .onEnd(() => {
+      isActive.value = false;
+      console.log('Gesture End');
+      // Decide if touchX/Y should be reset for tap-like behavior or kept for last scrub position
+      // touchX.value = null; 
+      // touchY.value = null;
+    })
+    .minDistance(1) // Prevents conflict with potential future tap gestures
+    .shouldCancelWhenOutside(true);
 
   if (isLoading) {
     return (
@@ -104,35 +136,37 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   const lastDateLabel = plotDates.length > 0 ? formatDateLabel(plotDates[plotDates.length - 1]) : "";
 
   return (
-    <View style={styles.container}>
-      {isEmptyState && (
-        <Text style={styles.placeholderText}>No savings data to display.</Text>
-      )}
-      {/* Chart Canvas with guide lines */}
-      <Canvas style={{ width: windowWidth, height: CHART_HEIGHT + CHART_PADDING * 2 }}>
-        {/* Top guide line */}
-        <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - CHART_PADDING, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
-        {/* Bottom guide line */}
-        <Line p1={{ x: CHART_PADDING, y: yBottom }} p2={{ x: windowWidth - CHART_PADDING, y: yBottom }} color="#666" strokeWidth={1} style="stroke" />
-        {/* Chart line */}
-        <Path
-          path={pathString}
-          color="lightblue"
-          style="stroke"
-          strokeWidth={3}
-        />
-      </Canvas>
-      {/* Max label (top right) */}
-      <Text style={[styles.axisLabel, styles.maxLabel, { top: yTop - 8, right: CHART_PADDING }]}>{maxLabel}</Text>
-      {/* Min label (bottom right, in-line with bottom guide) */}
-      <Text style={[styles.axisLabel, styles.minLabel, { top: yBottom - 8, right: CHART_PADDING }]}>{minLabel}</Text>
-      {/* X-axis labels */}
-      <View style={[styles.xAxisLabels, { marginTop: 4 }]}>
-        <Text style={styles.axisLabel}>{firstDateLabel}</Text>
-        <View style={{ flex: 1 }} />
-        <Text style={styles.axisLabel}>{lastDateLabel}</Text>
+    <GestureDetector gesture={panGesture}>
+      <View style={styles.container}>
+        {isEmptyState && (
+          <Text style={styles.placeholderText}>No savings data to display.</Text>
+        )}
+        {/* Chart Canvas with guide lines */}
+        <Canvas style={{ width: windowWidth, height: CHART_HEIGHT + CHART_PADDING * 2 }}>
+          {/* Top guide line */}
+          <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - CHART_PADDING, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
+          {/* Bottom guide line */}
+          <Line p1={{ x: CHART_PADDING, y: yBottom }} p2={{ x: windowWidth - CHART_PADDING, y: yBottom }} color="#666" strokeWidth={1} style="stroke" />
+          {/* Chart line */}
+          <Path
+            path={pathString}
+            color="lightblue"
+            style="stroke"
+            strokeWidth={3}
+          />
+        </Canvas>
+        {/* Max label (top right) */}
+        <Text style={[styles.axisLabel, styles.maxLabel, { top: yTop - 8, right: CHART_PADDING }]}>{maxLabel}</Text>
+        {/* Min label (bottom right, in-line with bottom guide) */}
+        <Text style={[styles.axisLabel, styles.minLabel, { top: yBottom - 8, right: CHART_PADDING }]}>{minLabel}</Text>
+        {/* X-axis labels */}
+        <View style={[styles.xAxisLabels, { marginTop: 4 }]}>
+          <Text style={styles.axisLabel}>{firstDateLabel}</Text>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.axisLabel}>{lastDateLabel}</Text>
+        </View>
       </View>
-    </View>
+    </GestureDetector>
   );
 }
 

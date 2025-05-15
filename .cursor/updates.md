@@ -222,3 +222,15 @@ alwaysApply: false
 - Modified `app/dashboard.tsx` to accept `isLoading` prop and pass it to `BalanceChart`.
 - Updated `app/index.tsx` to pass its `isLoading` state to the `Dashboard` component.
 - This ensures the user sees appropriate feedback during data fetching or when no data is available for the chart.
+
+## May 16, 2024 - Graph Touch/Scrub Gestures (Story 3.4)
+
+### Story 3.4: Implement Tap/Scrub Gesture on Graph
+- Refactored touch handling in `components/BalanceChart.tsx` to use `react-native-gesture-handler` instead of Skia's internal touch system.
+- Imported `GestureDetector` and `Gesture` from `react-native-gesture-handler`.
+- Added `GestureHandlerRootView` to `app/_layout.tsx` to enable gesture handling.
+- Implemented a pan gesture (`Gesture.Pan()`) to detect tap/scrub actions.
+- Used `useSharedValue` from `react-native-reanimated` to store touch state (`touchX`, `touchY`, `isActive`).
+- Wrapped the chart view with `<GestureDetector>`.
+- Touch coordinates (absolute within the component) are logged to the console during `onBegin` and `onUpdate` phases of the gesture, fulfilling the acceptance criteria for detecting touch coordinates.
+- Corrected event payload types for gesture callbacks (e.g., `PanGestureHandlerEventPayload`).
