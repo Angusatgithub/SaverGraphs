@@ -189,6 +189,12 @@ alwaysApply: false
 - Updated `Dashboard` to pass `balanceSummary` to the chart.
 - Chart now displays the user's real savings trend over time.
 
+## May 16, 2024 - Enhancement: Accurate Chart Range
+
+- Updated BalanceChart to start the X-axis at the first real data point (not before).
+- Y-axis now uses the true minimum balance in the data (not $0 unless $0 is present).
+- This prevents misleading drops to zero and makes the graph more accurate and visually representative.
+
 ## May 16, 2024 - Enhancement: Chart Axis Labels
 
 - Added Y-axis labels for min and max balance (always shows at least $0 and the highest balance).

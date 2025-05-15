@@ -29,15 +29,24 @@ export default function BalanceChart({ dates, balances }: BalanceChartProps) {
     return null;
   }
 
-  // Scale data to fit chart dimensions
-  const minBalance = Math.min(...balances, 0); // Always show at least $0
-  const maxBalance = Math.max(...balances);
+  // Find the first non-zero (or first) balance index
+  let firstIdx = 0;
+  while (firstIdx < balances.length && balances[firstIdx] === 0) {
+    firstIdx++;
+  }
+  // Use all data if all are zero
+  const plotDates = dates.slice(firstIdx);
+  const plotBalances = balances.slice(firstIdx);
+
+  // Y-axis: use min/max from actual data (not forced to $0 unless $0 is present)
+  const minBalance = Math.min(...plotBalances);
+  const maxBalance = Math.max(...plotBalances);
   const yRange = maxBalance - minBalance || 1; // Prevent division by zero
 
-  const xStep = dates.length > 1 ? chartWidth / (dates.length - 1) : 0;
+  const xStep = plotDates.length > 1 ? chartWidth / (plotDates.length - 1) : 0;
 
   // Map balances to chart Y coordinates (inverted, as 0 is top)
-  const points = balances.map((bal, i) => ({
+  const points = plotBalances.map((bal, i) => ({
     x: CHART_PADDING + i * xStep,
     y: CHART_HEIGHT - ((bal - minBalance) / yRange) * CHART_HEIGHT + CHART_PADDING,
   }));
@@ -51,8 +60,8 @@ export default function BalanceChart({ dates, balances }: BalanceChartProps) {
   // Format axis labels
   const minLabel = formatCurrency(minBalance);
   const maxLabel = formatCurrency(maxBalance);
-  const firstDateLabel = formatDateLabel(dates[0]);
-  const lastDateLabel = formatDateLabel(dates[dates.length - 1]);
+  const firstDateLabel = formatDateLabel(plotDates[0]);
+  const lastDateLabel = formatDateLabel(plotDates[plotDates.length - 1]);
 
   return (
     <View style={styles.container}>
