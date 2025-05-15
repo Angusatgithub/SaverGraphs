@@ -154,21 +154,30 @@ function processBalances(
       (a, b) => new Date(a.attributes.createdAt).getTime() - new Date(b.attributes.createdAt).getTime()
     );
 
+    let txWithBalanceAfterCount = 0;
     for (const tx of sortedTransactions) {
       const date = tx.attributes.createdAt.slice(0, 10);
-      allTxDates.add(date);
-      dailyBalancesForThisAccount.set(date, parseFloat(tx.attributes.balanceAfter.value));
+      if (tx.attributes.balanceAfter && tx.attributes.balanceAfter.value) {
+        allTxDates.add(date);
+        dailyBalancesForThisAccount.set(date, parseFloat(tx.attributes.balanceAfter.value));
+        txWithBalanceAfterCount++;
+      }
     }
+    console.log(`Account ${account.id} has ${transactions.length} transactions, ${txWithBalanceAfterCount} with balanceAfter.`);
     if (dailyBalancesForThisAccount.size > 0) {
       accountDailyBalances.set(account.id, dailyBalancesForThisAccount);
     }
   }
 
   if (allTxDates.size === 0) {
-    // No transactions found for any account, so no data points to plot.
-    // Optionally, one could create a single data point for today with current balances,
-    // but that's outside the scope of "processing transactions into date/balance data points".
-    return { dates: [], balances: [] };
+    console.warn('No transactions with balanceAfter found for any account. Using current balances as fallback.');
+    // Fallback: create a single data point for today using current balances
+    const today = new Date().toISOString().slice(0, 10);
+    let total = 0;
+    for (const account of accounts) {
+      total += parseFloat(account.attributes.balance.value);
+    }
+    return { dates: [today], balances: [parseFloat(total.toFixed(2))] };
   }
 
   const sortedUniqueDates = Array.from(allTxDates).sort();
