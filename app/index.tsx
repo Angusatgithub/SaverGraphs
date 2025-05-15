@@ -16,6 +16,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [transactionSummary, setTransactionSummary] = useState<Record<string, number>>({});
   const [balanceSummary, setBalanceSummary] = useState<{ dates: string[]; balances: number[] }>({ dates: [], balances: [] });
+  const [currentTimeframe, setCurrentTimeframe] = useState<'Monthly' | 'All'>('Monthly'); // Default to Monthly
 
   // On mount, check for stored API key
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function App() {
           }
           // Process all transactions for balance summary
           setTransactionSummary(summary);
-          const { dates, balances } = processBalances(txByAccount, saverAccounts);
+          const { dates, balances } = processBalances(txByAccount, saverAccounts, currentTimeframe);
           setBalanceSummary({ dates, balances });
           setIsLoading(false);
           return;
@@ -88,7 +89,7 @@ export default function App() {
         }
       }
       setTransactionSummary(summary);
-      const { dates, balances } = processBalances(txByAccount, saverAccounts);
+      const { dates, balances } = processBalances(txByAccount, saverAccounts, currentTimeframe);
       setBalanceSummary({ dates, balances });
     } catch (err) {
       if (err instanceof UpApiError) {
@@ -138,55 +139,48 @@ const styles = StyleSheet.create({
 // Helper to process balances
 function processBalances(
   txByAccount: Record<string, UpTransaction[]>,
-  accounts: UpAccount[]
+  accounts: UpAccount[],
+  timeframe: 'Monthly' | 'All' // Added timeframe argument
 ): { dates: string[]; balances: number[] } {
   if (accounts.length === 0) {
     return { dates: [], balances: [] };
   }
 
-  // Step 1: For each account, reconstruct daily balances by walking backward from current balance
+  // Step 1 & 2: Calculate full history (current logic based on 90 days of transactions)
   const accountDailyBalances = new Map<string, Map<string, number>>();
-  const allDates = new Set<string>();
+  const allDatesFullHistorySet = new Set<string>();
 
   for (const account of accounts) {
     const transactions = txByAccount[account.id] || [];
     if (transactions.length === 0) {
-      // If no transactions, just use current balance for today
       const today = new Date().toISOString().slice(0, 10);
       const map = new Map<string, number>();
       map.set(today, parseFloat(account.attributes.balance.value));
       accountDailyBalances.set(account.id, map);
-      allDates.add(today);
+      allDatesFullHistorySet.add(today);
       continue;
     }
-    // Sort transactions in reverse chronological order (latest first)
     const sortedTx = [...transactions].sort((a, b) => new Date(b.attributes.createdAt).getTime() - new Date(a.attributes.createdAt).getTime());
-    // Group transactions by date (YYYY-MM-DD)
     const txByDate = new Map<string, UpTransaction[]>();
     for (const tx of sortedTx) {
       const date = tx.attributes.createdAt.slice(0, 10);
       if (!txByDate.has(date)) txByDate.set(date, []);
       txByDate.get(date)!.push(tx);
-      allDates.add(date);
+      allDatesFullHistorySet.add(date);
     }
-    // Get all unique dates, sorted reverse chronologically
     const uniqueDates = Array.from(txByDate.keys()).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-    // Add today if not present
     const today = new Date().toISOString().slice(0, 10);
     if (!txByDate.has(today)) {
       uniqueDates.unshift(today);
-      allDates.add(today);
+      allDatesFullHistorySet.add(today);
     }
-    // Reconstruct balances
     const dailyBalances = new Map<string, number>();
     let runningBalance = parseFloat(account.attributes.balance.value);
     for (let i = 0; i < uniqueDates.length; i++) {
       const date = uniqueDates[i];
       if (i > 0) {
-        // For previous day, add back all transactions from the current day
-        const txs = txByDate.get(uniqueDates[i - 1]) || [];
-        for (const tx of txs) {
-          // Add back the transaction amount (reverse the effect)
+        const txsOnPrevDate = txByDate.get(uniqueDates[i - 1]) || [];
+        for (const tx of txsOnPrevDate) {
           runningBalance -= parseFloat(tx.attributes.amount.value);
         }
       }
@@ -195,24 +189,98 @@ function processBalances(
     accountDailyBalances.set(account.id, dailyBalances);
   }
 
-  // Step 2: Aggregate across accounts for each date, carrying forward balances
-  const allSortedDates = Array.from(allDates).sort();
+  const allSortedDatesFullHistory = Array.from(allDatesFullHistorySet).sort();
   const lastKnown: Record<string, number> = {};
-  const aggregatedBalances: number[] = [];
-  for (const date of allSortedDates) {
+  const aggregatedBalancesFullHistory: number[] = [];
+  for (const date of allSortedDatesFullHistory) {
     let total = 0;
     for (const account of accounts) {
       const dailyBalances = accountDailyBalances.get(account.id);
       if (dailyBalances && dailyBalances.has(date)) {
         lastKnown[account.id] = dailyBalances.get(date)!;
       }
-      // Use last known balance, or 0 if none
       total += lastKnown[account.id] ?? 0;
     }
-    aggregatedBalances.push(parseFloat(total.toFixed(2)));
+    aggregatedBalancesFullHistory.push(parseFloat(total.toFixed(2)));
   }
-  // Debug log
-  console.log('processBalances: dates', allSortedDates);
-  console.log('processBalances: balances', aggregatedBalances);
-  return { dates: allSortedDates, balances: aggregatedBalances };
+
+  if (timeframe === 'All') {
+    console.log('processBalances (All): dates', allSortedDatesFullHistory);
+    console.log('processBalances (All): balances', aggregatedBalancesFullHistory);
+    return { dates: allSortedDatesFullHistory, balances: aggregatedBalancesFullHistory };
+  }
+
+  if (timeframe === 'Monthly') {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+    const currentMonthStartDate = new Date(year, month, 1).toISOString().slice(0, 10);
+    const currentMonthEndDate = now.toISOString().slice(0, 10); // Today
+
+    let startIndex = -1;
+    let balanceOnMonthStart = 0;
+    let foundBalanceForMonthStart = false;
+
+    // Find data for the current month from the full history
+    for (let i = 0; i < allSortedDatesFullHistory.length; i++) {
+      const date = allSortedDatesFullHistory[i];
+      if (date < currentMonthStartDate) {
+        // This balance is before our month starts, could be the one to carry forward
+        balanceOnMonthStart = aggregatedBalancesFullHistory[i];
+        foundBalanceForMonthStart = true;
+      } else if (date >= currentMonthStartDate && date <= currentMonthEndDate) {
+        if (startIndex === -1) {
+          startIndex = i;
+          // If the first data point found is after the 1st of the month, 
+          // we use the balanceOnMonthStart (last known before this month started or on 1st if available earlier in loop)
+          // If allSortedDatesFullHistory[startIndex] IS currentMonthStartDate, this is fine.
+          // If allSortedDatesFullHistory[startIndex] is LATER than currentMonthStartDate, we need to prepend.
+        }
+      }
+      if (date > currentMonthEndDate && startIndex !== -1) {
+        // We've passed all relevant dates for the month
+        break;
+      }
+    }
+
+    const monthlyDates: string[] = [];
+    const monthlyBalances: number[] = [];
+
+    if (startIndex !== -1) { // If we found any data within the month
+      // Check if we need to prepend the start-of-month balance
+      if (allSortedDatesFullHistory[startIndex] > currentMonthStartDate && foundBalanceForMonthStart) {
+        monthlyDates.push(currentMonthStartDate);
+        monthlyBalances.push(balanceOnMonthStart);
+      }
+      
+      for (let i = startIndex; i < allSortedDatesFullHistory.length; i++) {
+        if (allSortedDatesFullHistory[i] <= currentMonthEndDate) {
+          monthlyDates.push(allSortedDatesFullHistory[i]);
+          monthlyBalances.push(aggregatedBalancesFullHistory[i]);
+        } else {
+          break; // Past current month's end date
+        }
+      }
+    } else if (foundBalanceForMonthStart) {
+      // No transactions this month, but there was a balance before this month started.
+      // Show this balance for the 1st of the month up to today.
+      // For simplicity, just show for the 1st and for today if today is after 1st.
+      monthlyDates.push(currentMonthStartDate);
+      monthlyBalances.push(balanceOnMonthStart);
+      if (currentMonthEndDate > currentMonthStartDate) {
+         // Add today's date only if it's different from the start date and there are no other points
+        if (!monthlyDates.includes(currentMonthEndDate)) { 
+            monthlyDates.push(currentMonthEndDate);
+            monthlyBalances.push(balanceOnMonthStart); // Balance carries forward
+        }
+      }
+    }
+    // If monthlyDates is still empty (e.g., new user, no history at all), it will return empty.
+
+    console.log('processBalances (Monthly): dates', monthlyDates);
+    console.log('processBalances (Monthly): balances', monthlyBalances);
+    return { dates: monthlyDates, balances: monthlyBalances };
+  }
+
+  return { dates: [], balances: [] }; // Should not be reached if timeframe is handled
 }

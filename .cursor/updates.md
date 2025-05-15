@@ -253,3 +253,16 @@ alwaysApply: false
 - Renaming, redefining as arrow function, and explicit `.call()` did not resolve the issue initially.
 - The issue was resolved by keeping the date formatting logic for the callout *inlined* within the gesture handler's `onUpdate` callback (inside the `runOnJS` block). The axis label formatting, using the same helper function but called during the main render pass, worked correctly once the function definition was restored to avoid `ReferenceError`.
 - This suggests a subtle issue with function references or closures in the Reanimated/Gesture Handler to JS thread bridge for that specific call path, or a bundler/runtime anomaly.
+
+## May 16, 2024 - Default Monthly Graph View (Story 4.9)
+
+### Story 4.9: Update Graph to Default Monthly View
+- Added `currentTimeframe` state to `app/index.tsx`, defaulting to `'Monthly'` (other options `'All'` for now).
+- Modified `processBalances` function to accept the `currentTimeframe`.
+- The function first calculates the full 90-day balance history as before.
+- If `currentTimeframe` is `'Monthly'`, it then filters this full history:
+  - Determines the start (1st of current month) and end (today) dates for the current calendar month.
+  - Extracts data points falling within this range.
+  - Implemented logic to find the balance just before the current month started and prepends this balance as the data point for the 1st of the current month if no actual transaction data exists on the 1st but there was a prior balance.
+  - If no transactions occurred in the current month, it displays the carried-forward balance from the start of the month for both the 1st and today's date (if different).
+- This ensures the graph, by default, displays aggregated savings data for the current calendar month.
