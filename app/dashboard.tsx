@@ -1,4 +1,5 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
+import BalanceChart from '../components/BalanceChart';
 import ThemedText from '../components/ThemedText';
 import { UpAccount } from './services/upApi';
 
@@ -28,6 +29,8 @@ export default function Dashboard({ accounts, transactionSummary, balanceSummary
         <ThemedText style={styles.summaryText}>Total Transactions (last 90 days): {totalTransactions}</ThemedText>
         <ThemedText style={styles.summaryText}>{balanceSummary.dates.length} days with transaction data</ThemedText>
       </View>
+
+      <BalanceChart />
 
       {accounts.map((account) => (
         <View key={account.id} style={styles.accountItem}>

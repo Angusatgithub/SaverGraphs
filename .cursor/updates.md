@@ -170,3 +170,12 @@ alwaysApply: false
   - If an account did *not* have a transaction on the current date, its most recently known `balanceAfter` (from a previous transaction day in the sorted list) is carried forward to the current date's aggregation.
   - If an account has had no transactions up to the current date in the sorted list, it contributes 0 to the aggregate until its first transaction.
 - This ensures the `balanceSummary` (containing `dates` and `balances`) provided to the dashboard is accurate for future graph plotting.
+
+## May 16, 2024 - Basic Graph Canvas (Story 3.1)
+
+### Story 3.1: Display Basic Skia Line Graph Canvas
+- Installed `@shopify/react-native-skia` library.
+- Created `BalanceChart.tsx` component in `components/`.
+- The component renders a React Native Skia `<Canvas>` element.
+- Drew a simple line path using hardcoded data points as a placeholder.
+- Integrated `BalanceChart` into the `DashboardScreen.tsx` for display.
