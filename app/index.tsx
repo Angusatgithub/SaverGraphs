@@ -139,82 +139,72 @@ function processBalances(
     return { dates: [], balances: [] };
   }
 
-  // Step 1: For each account, determine its balance on each day it had a transaction.
-  // This map stores: accountId -> (date -> balanceAfter of last tx on that date)
+  // Step 1: For each account, reconstruct daily balances by walking backward from current balance
   const accountDailyBalances = new Map<string, Map<string, number>>();
-  const allTxDates = new Set<string>();
+  const allDates = new Set<string>();
 
   for (const account of accounts) {
     const transactions = txByAccount[account.id] || [];
-    if (transactions.length === 0) continue;
-
-    const dailyBalancesForThisAccount = new Map<string, number>();
-    // Sort transactions by createdAt to ensure the last one for a day is processed last
-    const sortedTransactions = [...transactions].sort(
-      (a, b) => new Date(a.attributes.createdAt).getTime() - new Date(b.attributes.createdAt).getTime()
-    );
-
-    let txWithBalanceAfterCount = 0;
-    for (const tx of sortedTransactions) {
+    if (transactions.length === 0) {
+      // If no transactions, just use current balance for today
+      const today = new Date().toISOString().slice(0, 10);
+      const map = new Map<string, number>();
+      map.set(today, parseFloat(account.attributes.balance.value));
+      accountDailyBalances.set(account.id, map);
+      allDates.add(today);
+      continue;
+    }
+    // Sort transactions in reverse chronological order (latest first)
+    const sortedTx = [...transactions].sort((a, b) => new Date(b.attributes.createdAt).getTime() - new Date(a.attributes.createdAt).getTime());
+    // Group transactions by date (YYYY-MM-DD)
+    const txByDate = new Map<string, UpTransaction[]>();
+    for (const tx of sortedTx) {
       const date = tx.attributes.createdAt.slice(0, 10);
-      if (tx.attributes.balanceAfter && tx.attributes.balanceAfter.value) {
-        allTxDates.add(date);
-        dailyBalancesForThisAccount.set(date, parseFloat(tx.attributes.balanceAfter.value));
-        txWithBalanceAfterCount++;
-      }
+      if (!txByDate.has(date)) txByDate.set(date, []);
+      txByDate.get(date)!.push(tx);
+      allDates.add(date);
     }
-    console.log(`Account ${account.id} has ${transactions.length} transactions, ${txWithBalanceAfterCount} with balanceAfter.`);
-    if (dailyBalancesForThisAccount.size > 0) {
-      accountDailyBalances.set(account.id, dailyBalancesForThisAccount);
-    }
-  }
-
-  if (allTxDates.size === 0) {
-    console.warn('No transactions with balanceAfter found for any account. Using current balances as fallback.');
-    // Fallback: create a single data point for today using current balances
+    // Get all unique dates, sorted reverse chronologically
+    const uniqueDates = Array.from(txByDate.keys()).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    // Add today if not present
     const today = new Date().toISOString().slice(0, 10);
-    let total = 0;
-    for (const account of accounts) {
-      total += parseFloat(account.attributes.balance.value);
+    if (!txByDate.has(today)) {
+      uniqueDates.unshift(today);
+      allDates.add(today);
     }
-    return { dates: [today], balances: [parseFloat(total.toFixed(2))] };
-  }
-
-  const sortedUniqueDates = Array.from(allTxDates).sort();
-
-  // Step 2: For each unique sorted date, calculate the aggregated total balance.
-  // If an account didn't have a transaction on `currentDate`,
-  // use its balance from the most recent date <= `currentDate` where it DID have a transaction.
-  const finalAggregatedBalances: number[] = [];
-  const lastKnownBalanceForAccount = new Map<string, number>(); // Stores accountId -> last known balance
-
-  for (const currentDate of sortedUniqueDates) {
-    let aggregatedBalanceOnCurrentDate = 0;
-    for (const account of accounts) {
-      const balancesForThisAccount = accountDailyBalances.get(account.id);
-
-      if (balancesForThisAccount) {
-        // Check if this account had a transaction on the currentDate
-        if (balancesForThisAccount.has(currentDate)) {
-          const balanceOnCurrentDate = balancesForThisAccount.get(currentDate)!;
-          lastKnownBalanceForAccount.set(account.id, balanceOnCurrentDate); // Update last known balance
-          aggregatedBalanceOnCurrentDate += balanceOnCurrentDate;
-        } else {
-          // No transaction on currentDate for this account.
-          // Use its last known balance (carried forward from a previous date in sortedUniqueDates).
-          const carriedForwardBalance = lastKnownBalanceForAccount.get(account.id);
-          if (carriedForwardBalance !== undefined) {
-            aggregatedBalanceOnCurrentDate += carriedForwardBalance;
-          }
-          // If carriedForwardBalance is undefined, it means this account hasn't had a transaction yet
-          // up to this currentDate in the sorted list, so it contributes 0 to the aggregate.
+    // Reconstruct balances
+    const dailyBalances = new Map<string, number>();
+    let runningBalance = parseFloat(account.attributes.balance.value);
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const date = uniqueDates[i];
+      if (i > 0) {
+        // For previous day, add back all transactions from the current day
+        const txs = txByDate.get(uniqueDates[i - 1]) || [];
+        for (const tx of txs) {
+          // Add back the transaction amount (reverse the effect)
+          runningBalance -= parseFloat(tx.attributes.amount.value);
         }
       }
-      // If balancesForThisAccount is undefined (account has no transactions at all in the given period),
-      // it also contributes 0 to the aggregate.
+      dailyBalances.set(date, parseFloat(runningBalance.toFixed(2)));
     }
-    finalAggregatedBalances.push(parseFloat(aggregatedBalanceOnCurrentDate.toFixed(2)));
+    accountDailyBalances.set(account.id, dailyBalances);
   }
 
-  return { dates: sortedUniqueDates, balances: finalAggregatedBalances };
+  // Step 2: Aggregate across accounts for each date
+  const allSortedDates = Array.from(allDates).sort();
+  const aggregatedBalances: number[] = [];
+  for (const date of allSortedDates) {
+    let total = 0;
+    for (const account of accounts) {
+      const dailyBalances = accountDailyBalances.get(account.id);
+      if (dailyBalances && dailyBalances.has(date)) {
+        total += dailyBalances.get(date)!;
+      }
+    }
+    aggregatedBalances.push(parseFloat(total.toFixed(2)));
+  }
+  // Debug log
+  console.log('processBalances: dates', allSortedDates);
+  console.log('processBalances: balances', aggregatedBalances);
+  return { dates: allSortedDates, balances: aggregatedBalances };
 }
