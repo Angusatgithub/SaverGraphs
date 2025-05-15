@@ -30,7 +30,7 @@ export default function Dashboard({ accounts, transactionSummary, balanceSummary
         <ThemedText style={styles.summaryText}>{balanceSummary.dates.length} days with transaction data</ThemedText>
       </View>
 
-      <BalanceChart />
+      <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} />
 
       {accounts.map((account) => (
         <View key={account.id} style={styles.accountItem}>

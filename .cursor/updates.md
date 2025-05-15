@@ -179,3 +179,12 @@ alwaysApply: false
 - The component renders a React Native Skia `<Canvas>` element.
 - Drew a simple line path using hardcoded data points as a placeholder.
 - Integrated `BalanceChart` into the `DashboardScreen.tsx` for display.
+
+## May 16, 2024 - Plot Aggregated Savings Balance (Story 3.2)
+
+### Story 3.2: Plot Aggregated Savings Balance on Graph
+- Updated `BalanceChart` to accept `dates` and `balances` as props.
+- Scaled and mapped real savings data to chart coordinates.
+- Rendered the line path using the actual aggregated balance data.
+- Updated `Dashboard` to pass `balanceSummary` to the chart.
+- Chart now displays the user's real savings trend over time.
