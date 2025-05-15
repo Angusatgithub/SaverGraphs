@@ -1,8 +1,8 @@
 import { Canvas, Line, Path } from '@shopify/react-native-skia';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector, GestureUpdateEvent, PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
-import { useSharedValue } from 'react-native-reanimated';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
 
 interface BalanceChartProps {
   dates: string[];
@@ -13,6 +13,8 @@ interface BalanceChartProps {
 const CHART_HEIGHT = 200;
 const CHART_PADDING = 16;
 const CHART_BOTTOM_PADDING = 2; // Extra space for min label
+const CALLOUT_WIDTH = 120;
+const CALLOUT_HEIGHT = 60;
 
 function formatCurrency(value: number): string {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -24,39 +26,28 @@ function formatDateLabel(dateStr: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+interface CalloutData {
+  xPosition: number; // screen x to position callout
+  yPosition: number; // screen y of the data point on graph
+  date: string;
+  balance: number;
+  isVisible: boolean;
+}
+
 export default function BalanceChart({ dates, balances, isLoading }: BalanceChartProps) {
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = windowWidth - CHART_PADDING * 2;
 
   const touchX = useSharedValue<number | null>(null);
-  const touchY = useSharedValue<number | null>(null);
   const isActive = useSharedValue(false);
 
-  const panGesture = Gesture.Pan()
-    .onBegin((event: PanGestureHandlerEventPayload) => {
-      isActive.value = true;
-      touchX.value = event.x;
-      touchY.value = event.y;
-      console.log(`Gesture Begin: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`);
-    })
-    .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
-      if (isActive.value) {
-        // event.x, event.y are absolute coords within the GestureDetector view
-        touchX.value = event.x;
-        touchY.value = event.y;
-        // For Story 3.4, just log. For Story 3.5, we'll need to check if within chart bounds for callout.
-        console.log(`Gesture Update: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`);
-      }
-    })
-    .onEnd(() => {
-      isActive.value = false;
-      console.log('Gesture End');
-      // Decide if touchX/Y should be reset for tap-like behavior or kept for last scrub position
-      // touchX.value = null; 
-      // touchY.value = null;
-    })
-    .minDistance(1) // Prevents conflict with potential future tap gestures
-    .shouldCancelWhenOutside(true);
+  // React state for callout data & positioning
+  const [calloutData, setCalloutData] = useState<CalloutData | null>(null);
+
+  // Original plotting logic (refactored slightly for clarity and use in gesture)
+  let plotDates = dates;
+  let plotBalances = balances;
+  let isEmptyState = false;
 
   if (isLoading) {
     return (
@@ -66,70 +57,82 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
     );
   }
 
-  let plotDates = dates;
-  let plotBalances = balances;
-  let isEmptyState = false;
-
   if (!dates.length || !balances.length) {
     isEmptyState = true;
-    // Create a flat line for "No data"
     const today = new Date().toISOString().slice(0, 10);
-    plotDates = [today, today]; // Need at least two points for a line
+    plotDates = [today, today]; 
     plotBalances = [0, 0];
-  } else {
-    // Original logic to find the first non-zero (or first) balance index
-    let firstIdx = 0;
-    // This logic to slice data might not be ideal for showing actual trends from zero
-    // For now, keeping it as is, but might need review for financial accuracy if balances *start* at 0
-    // and that 0 is meaningful data.
-    // while (firstIdx < balances.length && balances[firstIdx] === 0) {
-    //   firstIdx++;
-    // }
-    // plotDates = dates.slice(firstIdx);
-    // plotBalances = balances.slice(firstIdx);
-    // If, after slicing, we end up with less than 2 points, it's effectively an empty/flat state
-    // if (plotDates.length < 2) {
-    //   isEmptyState = true;
-    //   const today = new Date().toISOString().slice(0, 10);
-    //   plotDates = [today, today];
-    //   plotBalances = [0, 0];
-    // }
   }
 
-  // Y-axis: use min/max from actual data (not forced to $0 unless $0 is present)
-  // For empty state, min/max will be 0.
   const minBalance = isEmptyState ? 0 : Math.min(...plotBalances);
   const maxBalance = isEmptyState ? 0 : Math.max(...plotBalances);
-  // Ensure yRange is at least 1, or a small number if min/max are same (e.g. all 0 for empty state)
   const yRange = (maxBalance - minBalance) || (isEmptyState ? 1 : (maxBalance === 0 ? 1 : maxBalance * 0.1) || 1);
-
   const xStep = plotDates.length > 1 ? chartWidth / (plotDates.length - 1) : 0;
-
-  // Y positions for guide lines and labels
   const yTop = CHART_PADDING;
   const yBottom = CHART_HEIGHT + CHART_PADDING - CHART_BOTTOM_PADDING;
-  const labelRight = windowWidth - CHART_PADDING;
 
-  // Map balances to chart Y coordinates (inverted, as 0 is top)
-  // Max value -> y = yTop (top line)
-  // Min value -> y = yBottom (bottom line)
   const points = plotBalances.map((bal, i) => ({
     x: CHART_PADDING + i * xStep,
     y: yTop + (1 - (bal - minBalance) / yRange) * (yBottom - yTop),
   }));
 
-  // Build path string
-  let pathString = "";
-  if (points.length > 0) {
-    pathString = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      pathString += ` L ${points[i].x} ${points[i].y}`;
-    }
-  } else { // Should not happen with current logic that ensures plotDates has 2 points for empty.
-    pathString = `M ${CHART_PADDING} ${yBottom} L ${windowWidth - CHART_PADDING} ${yBottom}`; // Default flat line
-  }
+  const pathString = points.length > 0 ? `M ${points[0].x} ${points[0].y}${points.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}` : `M ${CHART_PADDING} ${yBottom} L ${windowWidth - CHART_PADDING} ${yBottom}`;
 
-  // Format axis labels
+  // Function to update callout data (to be called from JS thread)
+  const updateCalloutJS = (data: CalloutData | null) => {
+    setCalloutData(data);
+  };
+
+  const panGesture = Gesture.Pan()
+    .onBegin((event) => {
+      isActive.value = true;
+      touchX.value = event.x; // event.x is relative to the GestureDetector
+    })
+    .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
+      if (isActive.value) {
+        touchX.value = event.x;
+        const currentX = event.x;
+
+        if (currentX !== null && xStep > 0 && plotDates.length > 0) {
+          // Adjust touchX to be relative to the chart's plottable area
+          const chartRelativeX = currentX - CHART_PADDING;
+          let selectedIndex = Math.round(chartRelativeX / xStep);
+          selectedIndex = Math.max(0, Math.min(plotDates.length - 1, selectedIndex));
+
+          if (selectedIndex >= 0 && selectedIndex < plotDates.length) {
+            const point = points[selectedIndex];
+            const date = plotDates[selectedIndex];
+            const balance = plotBalances[selectedIndex];
+            
+            // Calculate screen X for callout: use the actual point's X for precision
+            // currentX is the raw touch; point.x is the data point's canvas X
+            let calloutXPosition = point.x - (CALLOUT_WIDTH / 2); 
+            // Ensure callout doesn't go off screen
+            calloutXPosition = Math.max(CHART_PADDING, calloutXPosition);
+            calloutXPosition = Math.min(windowWidth - CHART_PADDING - CALLOUT_WIDTH, calloutXPosition);
+
+            runOnJS(updateCalloutJS)({
+              xPosition: calloutXPosition, 
+              yPosition: point.y - CALLOUT_HEIGHT - 8, // Position above the point
+              date: formatDateLabel(date),
+              balance: balance,
+              isVisible: true,
+            });
+          } else {
+            runOnJS(updateCalloutJS)(null);
+          }
+        } else {
+          runOnJS(updateCalloutJS)(null);
+        }
+      }
+    })
+    .onEnd(() => {
+      isActive.value = false;
+      runOnJS(updateCalloutJS)(null); // Hide callout on gesture end
+    })
+    .minDistance(1)
+    .shouldCancelWhenOutside(false); // Keep tracking even if finger slides out briefly
+
   const minLabel = formatCurrency(minBalance);
   const maxLabel = formatCurrency(maxBalance);
   const firstDateLabel = plotDates.length > 0 ? formatDateLabel(plotDates[0]) : "";
@@ -138,6 +141,22 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   return (
     <GestureDetector gesture={panGesture}>
       <View style={styles.container}>
+        {/* Callout View */} 
+        {calloutData?.isVisible && (
+          <View 
+            style={[
+              styles.calloutContainer, 
+              { 
+                left: calloutData.xPosition,
+                top: calloutData.yPosition,
+              }
+            ]}
+          >
+            <Text style={styles.calloutText}>{calloutData.date}</Text>
+            <Text style={styles.calloutText}>{formatCurrency(calloutData.balance)}</Text>
+          </View>
+        )}
+
         {isEmptyState && (
           <Text style={styles.placeholderText}>No savings data to display.</Text>
         )}
@@ -209,6 +228,22 @@ const styles = StyleSheet.create({
   axisLabel: {
     color: '#B0B0B0',
     fontSize: 12,
+    fontWeight: '500',
+  },
+  calloutContainer: {
+    position: 'absolute',
+    width: CALLOUT_WIDTH,
+    backgroundColor: 'rgba(40, 40, 40, 0.9)',
+    padding: 8,
+    borderRadius: 6,
+    borderColor: '#555',
+    borderWidth: 1,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  calloutText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '500',
   },
 }); 

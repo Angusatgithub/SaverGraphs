@@ -234,3 +234,16 @@ alwaysApply: false
 - Wrapped the chart view with `<GestureDetector>`.
 - Touch coordinates (absolute within the component) are logged to the console during `onBegin` and `onUpdate` phases of the gesture, fulfilling the acceptance criteria for detecting touch coordinates.
 - Corrected event payload types for gesture callbacks (e.g., `PanGestureHandlerEventPayload`).
+
+## May 16, 2024 - Graph Interaction Callout (Story 3.5)
+
+### Story 3.5: Display Callout with Date/Balance on Graph Interaction
+- Implemented callout display in `components/BalanceChart.tsx`.
+- Added React state (`useState`) to manage callout data (selected date, balance, position, visibility).
+- In the `onUpdate` phase of the `panGesture` (from `react-native-gesture-handler`):
+  - Calculated the closest data point (date/balance) based on the touch's X-coordinate relative to the chart.
+  - Used `runOnJS` to update the React state with the selected data and calculated callout position from the gesture handler.
+- Rendered a React Native `<View>` as the callout, absolutely positioned near the touch interaction point (above the data point on the graph line).
+- The callout displays the formatted date and balance of the selected point.
+- The callout appears during scrubbing and disappears when the gesture ends (`onEnd`).
+- Ensured callout positioning attempts to stay within screen bounds.
