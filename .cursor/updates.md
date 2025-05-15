@@ -205,3 +205,10 @@ alwaysApply: false
 
 - Fixed the processBalances helper to correctly carry forward the last known balance for each account on days with no transaction.
 - This prevents sudden drops to zero and ensures the savings graph is smooth and accurate.
+
+## May 16, 2024 - Chart UI Improvements: Stock App Style
+
+- Right-aligned both min and max balance labels, positioned at the top right and bottom right of the chart area.
+- Added faint horizontal guide lines at the top and bottom of the chart.
+- Adjusted the Y coordinate calculation so the graph line touches both guide lines when hitting min/max values.
+- Ensured min/max labels are precisely aligned with their respective guide lines, mimicking the style of modern investment/stock apps.
