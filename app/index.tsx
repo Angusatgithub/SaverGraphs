@@ -44,6 +44,7 @@ export default function App() {
             }
           }
           // Process all transactions for balance summary
+          setTransactionSummary(summary);
           const { dates, balances } = processBalances(txByAccount, saverAccounts);
           setBalanceSummary({ dates, balances });
           setIsLoading(false);
