@@ -261,6 +261,44 @@ export default function App() {
     // No navigation, just show dashboard in place
   };
 
+  // Helper to filter transactions by timeframe
+  function filterTransactionsByTimeframe(
+    transactions: UpTransaction[],
+    timeframe: Timeframe,
+    referenceDate: Date
+  ): UpTransaction[] {
+    const ref = new Date(referenceDate);
+    let start: Date, end: Date;
+
+    if (timeframe === 'Weekly') {
+      const day = ref.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      start = new Date(ref);
+      start.setDate(ref.getDate() + diffToMonday);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+    } else if (timeframe === 'Monthly') {
+      start = new Date(ref.getFullYear(), ref.getMonth(), 1);
+      end = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+    } else if (timeframe === 'Yearly') {
+      start = new Date(ref.getFullYear(), 0, 1);
+      end = new Date(ref.getFullYear(), 11, 31);
+    } else {
+      return transactions;
+    }
+
+    return transactions.filter(tx => {
+      const txDate = new Date(tx.attributes.createdAt);
+      return txDate >= start && txDate <= end;
+    });
+  }
+
+  // Calculate filtered transaction count for selected accounts and timeframe
+  const filteredTransactionCount = selectedAccountIdsForChart.reduce((sum, id) => {
+    const txns = allTransactions[id] || [];
+    return sum + filterTransactionsByTimeframe(txns, currentTimeframe, currentPeriodReferenceDate).length;
+  }, 0);
+
   return (
     <View style={styles.container}>
       <ErrorMessage message={error} />
@@ -279,6 +317,7 @@ export default function App() {
           currentPeriodReferenceDate={currentPeriodReferenceDate} // Pass new prop
           onPreviousPeriod={handlePreviousPeriod} // Pass new prop
           onNextPeriod={handleNextPeriod} // Pass new prop
+          filteredTransactionCount={filteredTransactionCount} // <-- Add this prop
         />
       ) : (
         !isLoading && <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />

@@ -20,6 +20,7 @@ interface DashboardProps {
   currentPeriodReferenceDate: Date;
   onPreviousPeriod: () => void;
   onNextPeriod: () => void;
+  filteredTransactionCount: number;
 }
 
 export default function Dashboard({ 
@@ -34,10 +35,10 @@ export default function Dashboard({
   onTimeframeChange,
   currentPeriodReferenceDate,
   onPreviousPeriod,
-  onNextPeriod
+  onNextPeriod,
+  filteredTransactionCount
 }: DashboardProps) {
   const totalAccounts = accounts.length;
-  const totalTransactions = Object.values(transactionSummary).reduce((sum, count) => sum + count, 0);
   const [isTimeframeModalVisible, setIsTimeframeModalVisible] = useState(false);
 
   const lastBalance = balanceSummary.balances.length > 0 
@@ -47,10 +48,6 @@ export default function Dashboard({
   // Calculate overview stats based on selected accounts
   const selectedAccounts = accounts.filter(acc => selectedAccountIdsForChart.includes(acc.id));
   const totalSelectedAccounts = selectedAccounts.length;
-  const totalSelectedTransactions = selectedAccountIdsForChart.reduce(
-    (sum, id) => sum + (transactionSummary[id] || 0),
-    0
-  );
 
   // Helper to get timeframe label
   const getTimeframeLabel = (timeframe: Timeframe) => {
@@ -108,7 +105,7 @@ export default function Dashboard({
         currentTimeframe={currentTimeframe}
         lastBalance={lastBalance}
         transactionsLabel={transactionsLabel}
-        totalSelectedTransactions={totalSelectedTransactions}
+        totalSelectedTransactions={filteredTransactionCount}
         daysWithData={balanceSummary.dates.length}
         onOpenTimeframeModal={() => setIsTimeframeModalVisible(true)}
         currentPeriodReferenceDate={currentPeriodReferenceDate}

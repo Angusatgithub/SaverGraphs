@@ -15,6 +15,9 @@ const CHART_PADDING = 16;
 const CHART_BOTTOM_PADDING = 2; // Extra space for min label
 const CALLOUT_WIDTH = 120;
 const CALLOUT_HEIGHT = 60;
+const CALLOUT_TOP_PADDING = 8;
+const CHART_TOP_OFFSET = CALLOUT_HEIGHT + CALLOUT_TOP_PADDING;
+const CANVAS_HEIGHT = CHART_HEIGHT + CHART_PADDING * 2 + CHART_TOP_OFFSET;
 
 const formatCurrency = (value: number): string => {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -37,7 +40,7 @@ const formatDateForCalloutLabel = (dateStr: string): string => {
 };
 
 interface CalloutData {
-  xPosition: number; // screen x to position callout
+  xPosition: number; // screen x to position callout (center of data point)
   yPosition: number; // screen y of the data point on graph
   date: string;
   balance: number;
@@ -78,8 +81,8 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   const maxBalance = isEmptyState ? 0 : Math.max(...plotBalances);
   const yRange = (maxBalance - minBalance) || (isEmptyState ? 1 : (maxBalance === 0 ? 1 : maxBalance * 0.1) || 1);
   const xStep = plotDates.length > 1 ? chartWidth / (plotDates.length - 1) : 0;
-  const yTop = CHART_PADDING;
-  const yBottom = CHART_HEIGHT + CHART_PADDING - CHART_BOTTOM_PADDING;
+  const yTop = CHART_TOP_OFFSET + CHART_PADDING;
+  const yBottom = CHART_TOP_OFFSET + CHART_HEIGHT + CHART_PADDING - CHART_BOTTOM_PADDING;
 
   // console.log(`Chart Calculated Values: xStep=${xStep}, yRange=${yRange}, minBalance=${minBalance}, maxBalance=${maxBalance}`); // Added for debugging
 
@@ -148,15 +151,13 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
               }
               // --- Inlined date formatting logic --- END
 
-              let calloutXPosition = point.x - (CALLOUT_WIDTH / 2); 
-              calloutXPosition = Math.max(CHART_PADDING, calloutXPosition);
-              calloutXPosition = Math.min(windowWidth - CHART_PADDING - CALLOUT_WIDTH, calloutXPosition);
-
+              // Center callout at the top, horizontally above the selected point
+              const calloutXPosition = point.x - (CALLOUT_WIDTH / 2);
               const dataForCallout: CalloutData = {
-                xPosition: calloutXPosition, 
-                yPosition: point.y - CALLOUT_HEIGHT - 8, 
-                date: formattedDateForCallout, // Use inlined result for callout
-                balance: balance, 
+                xPosition: point.x, // center of the data point for vertical line
+                yPosition: point.y, // y of the data point
+                date: formattedDateForCallout,
+                balance: balance,
                 isVisible: true,
               };
               console.log('Data for callout state update:', JSON.stringify(dataForCallout));
@@ -189,27 +190,29 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   return (
     <GestureDetector gesture={panGesture}>
       <View style={styles.container}>
-        {/* Callout View */} 
+        {/* Callout View at top, now inside the canvas area */}
         {calloutData?.isVisible && (
-          <View 
+          <View
             style={[
-              styles.calloutContainer, 
-              { 
-                left: calloutData.xPosition,
-                top: calloutData.yPosition,
-              }
+              styles.calloutContainerFixedTop,
+              {
+                left: Math.max(
+                  0,
+                  Math.min(
+                    (calloutData.xPosition - CALLOUT_WIDTH / 2),
+                    windowWidth - CHART_PADDING - CALLOUT_WIDTH
+                  )
+                ),
+                top: CALLOUT_TOP_PADDING,
+              },
             ]}
           >
             <Text style={styles.calloutText}>{calloutData.date}</Text>
             <Text style={styles.calloutText}>{formatCurrency(calloutData.balance)}</Text>
           </View>
         )}
-
-        {isEmptyState && (
-          <Text style={styles.placeholderText}>No savings data to display.</Text>
-        )}
-        {/* Chart Canvas with guide lines */}
-        <Canvas style={{ width: windowWidth, height: CHART_HEIGHT + CHART_PADDING * 2 }}>
+        {/* Chart Canvas with guide lines and vertical line */}
+        <Canvas style={{ width: windowWidth, height: CANVAS_HEIGHT }}>
           {/* Top guide line */}
           <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - CHART_PADDING, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
           {/* Bottom guide line */}
@@ -221,6 +224,17 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
             style="stroke"
             strokeWidth={3}
           />
+          {/* Vertical line from callout to chart point */}
+          {calloutData?.isVisible && (
+            <Line
+              p1={{ x: calloutData.xPosition, y: CALLOUT_TOP_PADDING + CALLOUT_HEIGHT }}
+              p2={{ x: calloutData.xPosition, y: calloutData.yPosition }}
+              color="#888"
+              strokeWidth={1}
+              style="stroke"
+              opacity={0.5}
+            />
+          )}
         </Canvas>
         {/* Max label (top right) */}
         <Text style={[styles.axisLabel, styles.maxLabel, { top: yTop - 8, right: CHART_PADDING }]}>{maxLabel}</Text>
@@ -232,6 +246,9 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
           <View style={{ flex: 1 }} />
           <Text style={styles.axisLabel}>{lastDateLabel}</Text>
         </View>
+        {isEmptyState && (
+          <Text style={styles.placeholderText}>No savings data to display.</Text>
+        )}
       </View>
     </GestureDetector>
   );
@@ -279,6 +296,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   calloutContainer: {
+    position: 'absolute',
+    width: CALLOUT_WIDTH,
+    backgroundColor: 'rgba(40, 40, 40, 0.9)',
+    padding: 8,
+    borderRadius: 6,
+    borderColor: '#555',
+    borderWidth: 1,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  calloutContainerFixedTop: {
     position: 'absolute',
     width: CALLOUT_WIDTH,
     backgroundColor: 'rgba(40, 40, 40, 0.9)',

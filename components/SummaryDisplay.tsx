@@ -95,16 +95,12 @@ export default function SummaryDisplay({
 
 
       <View style={styles.summaryRow}>
-        <ThemedText style={styles.summaryLabel}>Total Balance:</ThemedText>
+        <ThemedText style={styles.summaryLabel}>Current Total Balance:</ThemedText>
         <ThemedText style={styles.summaryValue}>${lastBalance}</ThemedText>
       </View>
       <View style={styles.summaryRow}>
         <ThemedText style={styles.summaryLabel}>{transactionsLabel}:</ThemedText>
         <ThemedText style={styles.summaryValue}>{totalSelectedTransactions}</ThemedText>
-      </View>
-      <View style={styles.summaryRow}>
-        <ThemedText style={styles.summaryLabel}>Days with transaction data:</ThemedText>
-        <ThemedText style={styles.summaryValue}>{daysWithData}</ThemedText>
       </View>
 
       <View style={styles.periodNavigationRow}>

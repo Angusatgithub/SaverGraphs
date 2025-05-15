@@ -425,3 +425,18 @@ alwaysApply: false
   - Updated `DashboardProps` in `app/dashboard.tsx` to include new props for period navigation.
   - Ensured these new props (`currentPeriodReferenceDate`, `onPreviousPeriod`, `onNextPeriod`) are correctly passed from `app/index.tsx` through `app/dashboard.tsx` to `components/SummaryDisplay.tsx`, resolving a runtime error.
   - Corrected a variable scope issue for `const today = new Date()` within `processBalances` in `app/index.tsx` for accurate end-date capping in 'Monthly' and 'Yearly' views.
+
+## May 17, 2024 - Refactored BalanceChart so the callout box is always fixed at the top of the chart container, centered above the selected data point, and added a faint vertical line from the callout to the chart point while scrubbing.
+
+## May 18, 2024 - Refinements to Persistence, Callout, and Chart Logic
+
+### Enhanced Persistence Logic (`app/index.tsx`)
+- **Default Account Selection Storage:** If no account selection preference is found in storage upon app load (e.g., after initial API key setup), the system now defaults to selecting all available saver accounts. This default selection is then immediately stored, ensuring a consistent preference is always set.
+- **`currentPeriodReferenceDate` Non-Persistence:** Clarified via comments and logic that the `currentPeriodReferenceDate` (used for graph period navigation) is intentionally not persisted between sessions. It defaults to the current day upon app launch or when a new API key is submitted.
+
+### Balance Chart Enhancements (`components/BalanceChart.tsx`)
+- **Callout Vertical Indicator Line:** Implemented a faint vertical line that visually connects the callout box (fixed at the top of the chart) to the corresponding data point on the graph line during touch/scrub interactions. This improves the user's ability to associate the callout information with the precise point on the chart.
+- **Robust Y-Axis Range Calculation:** The logic for determining the Y-axis scale (`yRange`) has been made more robust to gracefully handle edge cases, such as when all balance data points are zero or when minimum and maximum balances are identical. This prevents potential division-by-zero errors and ensures the chart renders correctly in more scenarios.
+- **Refined Layout Constants:** Introduced and utilized more specific layout constants (e.g., `CHART_BOTTOM_PADDING`, `CALLOUT_TOP_PADDING`, `CHART_TOP_OFFSET`) for finer control over the positioning of chart elements, particularly the callout and axis labels, leading to a more polished UI.
+- **Improved Date Formatting Utility:** Enhanced the `formatDateForCalloutLabel` function with more comprehensive error checking (e.g., for invalid date strings or objects) to prevent runtime errors and ensure graceful failure if unexpected date formats are encountered.
+- **Debugging Logs:** Maintained several `console.log` statements within the gesture handling logic (`panGesture` callbacks) to aid in diagnosing touch interaction behaviors. These are intended for ongoing development and debugging.
