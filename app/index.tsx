@@ -111,7 +111,12 @@ export default function App() {
       <ErrorMessage message={error} />
       <SuccessMessage message={success} onComplete={handleSuccessComplete} />
       {accounts ? (
-        <Dashboard accounts={accounts} transactionSummary={transactionSummary} balanceSummary={balanceSummary} />
+        <Dashboard 
+          accounts={accounts} 
+          transactionSummary={transactionSummary} 
+          balanceSummary={balanceSummary} 
+          isLoading={isLoading}
+        />
       ) : (
         !isLoading && <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
       )}

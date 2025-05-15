@@ -212,3 +212,13 @@ alwaysApply: false
 - Added faint horizontal guide lines at the top and bottom of the chart.
 - Adjusted the Y coordinate calculation so the graph line touches both guide lines when hitting min/max values.
 - Ensured min/max labels are precisely aligned with their respective guide lines, mimicking the style of modern investment/stock apps.
+
+## May 16, 2024 - Graph Placeholders (Story 3.3)
+
+### Story 3.3: Display Graph Placeholder for No Data/Loading
+- Updated `BalanceChart.tsx` to accept an `isLoading` prop.
+- If `isLoading` is true, the chart displays a "Loading savings data..." message.
+- If `isLoading` is false and no data (`dates` or `balances` are empty), the chart displays "No savings data to display." and renders a flat line at $0.
+- Modified `app/dashboard.tsx` to accept `isLoading` prop and pass it to `BalanceChart`.
+- Updated `app/index.tsx` to pass its `isLoading` state to the `Dashboard` component.
+- This ensures the user sees appropriate feedback during data fetching or when no data is available for the chart.

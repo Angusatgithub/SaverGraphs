@@ -7,10 +7,11 @@ interface DashboardProps {
   accounts: UpAccount[];
   transactionSummary: Record<string, number>;
   balanceSummary: { dates: string[]; balances: number[] };
+  isLoading: boolean;
   // currentTotalBalance: string | null; // No longer needed with revised balanceSummary
 }
 
-export default function Dashboard({ accounts, transactionSummary, balanceSummary }: DashboardProps) {
+export default function Dashboard({ accounts, transactionSummary, balanceSummary, isLoading }: DashboardProps) {
   const totalAccounts = accounts.length;
   const totalTransactions = Object.values(transactionSummary).reduce((sum, count) => sum + count, 0);
 
@@ -30,7 +31,7 @@ export default function Dashboard({ accounts, transactionSummary, balanceSummary
         <ThemedText style={styles.summaryText}>{balanceSummary.dates.length} days with transaction data</ThemedText>
       </View>
 
-      <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} />
+      <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} isLoading={isLoading} />
 
       {accounts.map((account) => (
         <View key={account.id} style={styles.accountItem}>

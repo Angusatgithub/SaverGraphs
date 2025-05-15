@@ -5,6 +5,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 interface BalanceChartProps {
   dates: string[];
   balances: number[];
+  isLoading: boolean;
 }
 
 const CHART_HEIGHT = 200;
@@ -21,28 +22,54 @@ function formatDateLabel(dateStr: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function BalanceChart({ dates, balances }: BalanceChartProps) {
+export default function BalanceChart({ dates, balances, isLoading }: BalanceChartProps) {
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = windowWidth - CHART_PADDING * 2;
 
-  // If no data, render nothing (could add a placeholder in the future)
-  if (!dates.length || !balances.length) {
-    return null;
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.placeholderContainer]}>
+        <Text style={styles.placeholderText}>Loading savings data...</Text>
+      </View>
+    );
   }
 
-  // Find the first non-zero (or first) balance index
-  let firstIdx = 0;
-  while (firstIdx < balances.length && balances[firstIdx] === 0) {
-    firstIdx++;
+  let plotDates = dates;
+  let plotBalances = balances;
+  let isEmptyState = false;
+
+  if (!dates.length || !balances.length) {
+    isEmptyState = true;
+    // Create a flat line for "No data"
+    const today = new Date().toISOString().slice(0, 10);
+    plotDates = [today, today]; // Need at least two points for a line
+    plotBalances = [0, 0];
+  } else {
+    // Original logic to find the first non-zero (or first) balance index
+    let firstIdx = 0;
+    // This logic to slice data might not be ideal for showing actual trends from zero
+    // For now, keeping it as is, but might need review for financial accuracy if balances *start* at 0
+    // and that 0 is meaningful data.
+    // while (firstIdx < balances.length && balances[firstIdx] === 0) {
+    //   firstIdx++;
+    // }
+    // plotDates = dates.slice(firstIdx);
+    // plotBalances = balances.slice(firstIdx);
+    // If, after slicing, we end up with less than 2 points, it's effectively an empty/flat state
+    // if (plotDates.length < 2) {
+    //   isEmptyState = true;
+    //   const today = new Date().toISOString().slice(0, 10);
+    //   plotDates = [today, today];
+    //   plotBalances = [0, 0];
+    // }
   }
-  // Use all data if all are zero
-  const plotDates = dates.slice(firstIdx);
-  const plotBalances = balances.slice(firstIdx);
 
   // Y-axis: use min/max from actual data (not forced to $0 unless $0 is present)
-  const minBalance = Math.min(...plotBalances);
-  const maxBalance = Math.max(...plotBalances);
-  const yRange = maxBalance - minBalance || 1; // Prevent division by zero
+  // For empty state, min/max will be 0.
+  const minBalance = isEmptyState ? 0 : Math.min(...plotBalances);
+  const maxBalance = isEmptyState ? 0 : Math.max(...plotBalances);
+  // Ensure yRange is at least 1, or a small number if min/max are same (e.g. all 0 for empty state)
+  const yRange = (maxBalance - minBalance) || (isEmptyState ? 1 : (maxBalance === 0 ? 1 : maxBalance * 0.1) || 1);
 
   const xStep = plotDates.length > 1 ? chartWidth / (plotDates.length - 1) : 0;
 
@@ -60,19 +87,27 @@ export default function BalanceChart({ dates, balances }: BalanceChartProps) {
   }));
 
   // Build path string
-  let pathString = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i++) {
-    pathString += ` L ${points[i].x} ${points[i].y}`;
+  let pathString = "";
+  if (points.length > 0) {
+    pathString = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      pathString += ` L ${points[i].x} ${points[i].y}`;
+    }
+  } else { // Should not happen with current logic that ensures plotDates has 2 points for empty.
+    pathString = `M ${CHART_PADDING} ${yBottom} L ${windowWidth - CHART_PADDING} ${yBottom}`; // Default flat line
   }
 
   // Format axis labels
   const minLabel = formatCurrency(minBalance);
   const maxLabel = formatCurrency(maxBalance);
-  const firstDateLabel = formatDateLabel(plotDates[0]);
-  const lastDateLabel = formatDateLabel(plotDates[plotDates.length - 1]);
+  const firstDateLabel = plotDates.length > 0 ? formatDateLabel(plotDates[0]) : "";
+  const lastDateLabel = plotDates.length > 0 ? formatDateLabel(plotDates[plotDates.length - 1]) : "";
 
   return (
     <View style={styles.container}>
+      {isEmptyState && (
+        <Text style={styles.placeholderText}>No savings data to display.</Text>
+      )}
       {/* Chart Canvas with guide lines */}
       <Canvas style={{ width: windowWidth, height: CHART_HEIGHT + CHART_PADDING * 2 }}>
         {/* Top guide line */}
@@ -104,9 +139,21 @@ export default function BalanceChart({ dates, balances }: BalanceChartProps) {
 const styles = StyleSheet.create({
   container: {
     marginTop: 20,
-    marginBottom: 32, // Extra space below chart
+    marginBottom: 20, // Adjusted from 32 for placeholder text
     alignItems: 'center',
     width: '100%',
+  },
+  placeholderContainer: {
+    height: CHART_HEIGHT + CHART_PADDING * 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#B0B0B0',
+    fontSize: 16,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: CHART_HEIGHT / 2, // Position it roughly in the middle of where chart would be
   },
   maxLabel: {
     position: 'absolute',
