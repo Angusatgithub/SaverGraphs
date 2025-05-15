@@ -440,3 +440,23 @@ alwaysApply: false
 - **Refined Layout Constants:** Introduced and utilized more specific layout constants (e.g., `CHART_BOTTOM_PADDING`, `CALLOUT_TOP_PADDING`, `CHART_TOP_OFFSET`) for finer control over the positioning of chart elements, particularly the callout and axis labels, leading to a more polished UI.
 - **Improved Date Formatting Utility:** Enhanced the `formatDateForCalloutLabel` function with more comprehensive error checking (e.g., for invalid date strings or objects) to prevent runtime errors and ensure graceful failure if unexpected date formats are encountered.
 - **Debugging Logs:** Maintained several `console.log` statements within the gesture handling logic (`panGesture` callbacks) to aid in diagnosing touch interaction behaviors. These are intended for ongoing development and debugging.
+
+## May 18, 2024 - Added `CornerPathEffect` to the Skia line chart in `BalanceChart.tsx` to introduce rounded corners, addressing the user's request for smoothing.
+
+## May 18, 2024 - Animated Balance Chart Path
+
+### Balance Chart Animation (`components/BalanceChart.tsx`)
+- **Path Animation:** Implemented path animation for the balance chart line using React Native Skia and Reanimated.
+  - When `dates` or `balances` props change, the chart path now animates smoothly from its previous state to the new state.
+  - Utilized Reanimated's `useSharedValue` for `previousPointsSV` (previous path points), `currentPointsSV` (target path points), and `animationProgress`.
+  - A `useEffect` hook recalculates points and triggers a `withTiming` animation on `animationProgress` when data changes.
+  - A `useDerivedValue` (`animatedSkPath`) interpolates between `previousPointsSV` and `currentPointsSV` based on `animationProgress` to generate an animated `Skia.Path` object.
+  - The Skia `<Path>` component was updated to use this animated path (aliased as `<SkiaPath>`).
+- **Animation Handling for Edge Cases:**
+  - Initial animation: Path animates in from the bottom of the chart on first data load.
+  - Empty state: Path animates to/from a flat line at the bottom.
+  - Differing point counts: Simplified transition where the new path animates in from the bottom.
+- **Gesture Handler Fix:** Reinstated the `updateCalloutJS` function definition to resolve linter errors and ensure the pan gesture handler correctly updates the callout's React state.
+- **User Adjustments Reflected:**
+  - `CHART_HEIGHT` was adjusted from 340 to 300.
+  - The horizontal guide lines (top and bottom) were shortened, now extending to `windowWidth - 100` instead of `windowWidth - CHART_PADDING`.

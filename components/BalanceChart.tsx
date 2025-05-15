@@ -1,8 +1,10 @@
-import { Canvas, Line, Path } from '@shopify/react-native-skia';
-import React, { useState } from 'react';
+import { Canvas, CornerPathEffect, Line, Skia, Path as SkiaPath } from '@shopify/react-native-skia';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector, GestureUpdateEvent, PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { runOnJS, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
+
+interface Point { x: number; y: number; }
 
 interface BalanceChartProps {
   dates: string[];
@@ -10,7 +12,7 @@ interface BalanceChartProps {
   isLoading: boolean;
 }
 
-const CHART_HEIGHT = 360;
+const CHART_HEIGHT = 300;
 const CHART_PADDING = 16;
 const CHART_BOTTOM_PADDING = 2; // Extra space for min label
 const CALLOUT_WIDTH = 120;
@@ -57,53 +59,183 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   // React state for callout data & positioning
   const [calloutData, setCalloutData] = useState<CalloutData | null>(null);
 
-  // Original plotting logic (refactored slightly for clarity and use in gesture)
-  let plotDates = dates;
-  let plotBalances = balances;
-  let isEmptyState = false;
+  // Animation shared values
+  const previousPointsSV = useSharedValue<Point[]>([]);
+  const currentPointsSV = useSharedValue<Point[]>([]);
+  const animationProgress = useSharedValue(0);
 
-  if (isLoading) {
-    return (
-      <View style={[styles.container, styles.placeholderContainer]}>
-        <Text style={styles.placeholderText}>Loading savings data...</Text>
-      </View>
-    );
-  }
-
-  if (!dates.length || !balances.length) {
-    isEmptyState = true;
-    const today = new Date().toISOString().slice(0, 10);
-    plotDates = [today, today]; 
-    plotBalances = [0, 0];
-  }
-
-  const minBalance = isEmptyState ? 0 : Math.min(...plotBalances);
-  const maxBalance = isEmptyState ? 0 : Math.max(...plotBalances);
-  const yRange = (maxBalance - minBalance) || (isEmptyState ? 1 : (maxBalance === 0 ? 1 : maxBalance * 0.1) || 1);
-  const xStep = plotDates.length > 1 ? chartWidth / (plotDates.length - 1) : 0;
   const yTop = CHART_TOP_OFFSET + CHART_PADDING;
   const yBottom = CHART_TOP_OFFSET + CHART_HEIGHT + CHART_PADDING - CHART_BOTTOM_PADDING;
-
-  // console.log(`Chart Calculated Values: xStep=${xStep}, yRange=${yRange}, minBalance=${minBalance}, maxBalance=${maxBalance}`); // Added for debugging
-
-  const points = plotBalances.map((bal, i) => ({
-    x: CHART_PADDING + i * xStep,
-    y: yTop + (1 - (bal - minBalance) / yRange) * (yBottom - yTop),
-  }));
-
-  const pathString = points.length > 0 ? `M ${points[0].x} ${points[0].y}${points.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}` : `M ${CHART_PADDING} ${yBottom} L ${windowWidth - CHART_PADDING} ${yBottom}`;
 
   // Function to update callout data (to be called from JS thread)
   const updateCalloutJS = (data: CalloutData | null) => {
     setCalloutData(data);
   };
 
+  useEffect(() => {
+    let effectivePlotDates = dates;
+    let effectivePlotBalances = balances;
+    let currentIsEmptyState = false;
+
+    if (isLoading) {
+      const oldPoints = [...currentPointsSV.value];
+      previousPointsSV.value = oldPoints;
+      currentPointsSV.value = []; // Target empty state
+      animationProgress.value = 0;
+      animationProgress.value = withTiming(1, { duration: 300 });
+      return;
+    }
+
+    if (!dates.length || !balances.length) {
+      currentIsEmptyState = true;
+      const today = new Date().toISOString().slice(0, 10);
+      effectivePlotDates = [today, today];
+      effectivePlotBalances = [0, 0];
+    }
+
+    const currentMinBalance = currentIsEmptyState ? 0 : Math.min(...effectivePlotBalances);
+    const currentMaxBalance = currentIsEmptyState ? 0 : Math.max(...effectivePlotBalances);
+    let currentYRange = currentMaxBalance - currentMinBalance;
+    if (currentYRange === 0) {
+      currentYRange = currentIsEmptyState ? 1 : (currentMaxBalance === 0 ? 1 : Math.abs(currentMaxBalance * 0.1) || 1);
+    }
+    const currentXStep = effectivePlotDates.length > 1 ? chartWidth / (effectivePlotDates.length - 1) : chartWidth;
+
+    const newCalculatedPoints: Point[] = effectivePlotBalances.map((bal, i) => ({
+      x: CHART_PADDING + i * currentXStep,
+      y: yTop + (1 - (bal - currentMinBalance) / currentYRange) * (yBottom - yTop),
+    }));
+
+    const oldCurrentPoints = [...currentPointsSV.value];
+    currentPointsSV.value = [...newCalculatedPoints];
+
+    if (oldCurrentPoints.length === 0 && newCalculatedPoints.length > 0) {
+      // First data load after being empty, animate from bottom
+      previousPointsSV.value = newCalculatedPoints.map(p => ({ x: p.x, y: yBottom }));
+    } else {
+      previousPointsSV.value = oldCurrentPoints;
+    }
+    
+    animationProgress.value = 0;
+    animationProgress.value = withTiming(1, { duration: 500 });
+
+  }, [dates, balances, isLoading, chartWidth, yTop, yBottom, CHART_PADDING, windowWidth]);
+
+  const animatedSkPath = useDerivedValue(() => {
+    const progress = animationProgress.value;
+    const prevPoints = previousPointsSV.value;
+    const currPoints = currentPointsSV.value;
+    
+    const emptyPathDefaultString = `M ${CHART_PADDING} ${yBottom} L ${windowWidth - CHART_PADDING} ${yBottom}`;
+    const emptySkPath = Skia.Path.MakeFromSVGString(emptyPathDefaultString) || Skia.Path.Make();
+
+    if (currPoints.length === 0) { // Target state is empty
+      if (prevPoints.length === 0 || progress === 1) { // Already empty or animation to empty finished
+        return emptySkPath;
+      }
+      // Animating from prevPoints to empty (all points to yBottom)
+      const pointsToEmpty = prevPoints.map(p => ({
+        x: p.x,
+        y: p.y + (yBottom - p.y) * progress,
+      }));
+      if (pointsToEmpty.length === 0) return emptySkPath;
+      const pathStrToEmpty = `M ${pointsToEmpty[0].x} ${pointsToEmpty[0].y}${pointsToEmpty.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}`;
+      return Skia.Path.MakeFromSVGString(pathStrToEmpty) || Skia.Path.Make();
+    }
+
+    let effectivePrevPoints = prevPoints;
+    if (prevPoints.length === 0 && currPoints.length > 0) { // Initial animation from baseline
+      effectivePrevPoints = currPoints.map(p => ({ x: p.x, y: yBottom }));
+    }
+    
+    // Simplified: if point counts differ (and not initial anim), animate current path from bottom.
+    // This avoids complex morphing logic for differing point counts in this example.
+    if (effectivePrevPoints.length > 0 && effectivePrevPoints.length !== currPoints.length) {
+      const pointsAnimatingIn = currPoints.map(cp => ({
+        x: cp.x, // X positions are target
+        y: yBottom + (cp.y - yBottom) * progress, // Y animates from bottom
+      }));
+      if (pointsAnimatingIn.length === 0) return emptySkPath;
+      const pathStrIn = `M ${pointsAnimatingIn[0].x} ${pointsAnimatingIn[0].y}${pointsAnimatingIn.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}`;
+      return Skia.Path.MakeFromSVGString(pathStrIn) || Skia.Path.Make();
+    }
+
+    // Morphing (assuming same number of points or initial animation setup)
+    const interpolatedPoints: Point[] = [];
+    const len = currPoints.length;
+    if (len === 0) return emptySkPath; // Should be caught by currPoints.length === 0
+
+    for (let i = 0; i < len; i++) {
+      const prevP = (effectivePrevPoints[i] || { x: currPoints[i].x, y: yBottom }); // Fallback for safety
+      const currP = currPoints[i];
+      interpolatedPoints.push({
+        x: prevP.x + (currP.x - prevP.x) * progress,
+        y: prevP.y + (currP.y - currP.y) * progress,
+      });
+    }
+
+    if (interpolatedPoints.length === 0) return emptySkPath;
+    const pathStr = `M ${interpolatedPoints[0].x} ${interpolatedPoints[0].y}${interpolatedPoints.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}`;
+    return Skia.Path.MakeFromSVGString(pathStr) || Skia.Path.Make();
+  }, [CHART_PADDING, yBottom, windowWidth]); // External scope values used in derived value
+
+  // The rest of the component logic that depends on current (non-animated) data for labels, callouts etc.
+  // needs to use the most recent props (dates, balances) or derived values from them, not animated state.
+  // For simplicity, callout and labels will use data derived similarly to how newCalculatedPoints is made in useEffect.
+  // This part needs careful review if labels/callouts should also animate or sync with the animated path's perceived state.
+  // For now, they will reflect the *target* state.
+
+  let displayPlotDates = dates;
+  let displayPlotBalances = balances;
+  let displayIsEmptyState = false;
+  if (isLoading) {
+    // Return loading placeholder directly, animation logic is for when not loading
+    return (
+      <View style={[styles.container, styles.placeholderContainer]}>
+        <Text style={styles.placeholderText}>Loading savings data...</Text>
+      </View>
+    );
+  }
+  if (!dates.length || !balances.length) {
+    displayIsEmptyState = true;
+    const today = new Date().toISOString().slice(0, 10);
+    displayPlotDates = [today, today];
+    displayPlotBalances = [0, 0];
+  }
+  const displayMinBalance = displayIsEmptyState ? 0 : Math.min(...displayPlotBalances);
+  const displayMaxBalance = displayIsEmptyState ? 0 : Math.max(...displayPlotBalances);
+  const displayXStep = displayPlotDates.length > 1 ? chartWidth / (displayPlotDates.length - 1) : 0;
+  
+  // Points for callout - uses instantaneous data
+  const currentDisplayPoints = displayPlotBalances.map((bal, i) => {
+    let currentYRange = displayMaxBalance - displayMinBalance;
+    if (currentYRange === 0) {
+      currentYRange = displayIsEmptyState ? 1 : (displayMaxBalance === 0 ? 1 : Math.abs(displayMaxBalance * 0.1) || 1);
+    }
+    return {
+      x: CHART_PADDING + i * displayXStep,
+      y: yTop + (1 - (bal - displayMinBalance) / currentYRange) * (yBottom - yTop),
+    };
+  });
+
+  const minLabel = formatCurrency(displayMinBalance);
+  const maxLabel = formatCurrency(displayMaxBalance);
+  // Axis labels will now call the restored function
+  const firstDateLabel = displayPlotDates.length > 0 && displayPlotDates[0] ? formatDateForCalloutLabel(displayPlotDates[0]) : "";
+  const lastDateLabel = displayPlotDates.length > 0 && displayPlotDates[displayPlotDates.length - 1] ? formatDateForCalloutLabel(displayPlotDates[displayPlotDates.length - 1]) : "";
+
+  // Use displayMinBalance, displayMaxBalance, displayPlotDates for labels
+  const finalMinLabel = formatCurrency(displayMinBalance);
+  const finalMaxLabel = formatCurrency(displayMaxBalance);
+  const finalFirstDateLabel = displayPlotDates.length > 0 && displayPlotDates[0] ? formatDateForCalloutLabel(displayPlotDates[0]) : "";
+  const finalLastDateLabel = displayPlotDates.length > 0 && displayPlotDates[displayPlotDates.length - 1] ? formatDateForCalloutLabel(displayPlotDates[displayPlotDates.length - 1]) : "";
+
   const panGesture = Gesture.Pan()
     .onBegin((event: PanGestureHandlerEventPayload) => {
       isActive.value = true;
       touchX.value = event.x;
       // touchY.value = event.y; // Keep commented if not strictly needed yet
-      console.log(`Gesture Begin: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`); // Ensure this is active
+     //console.log(`Gesture Begin: x=${event.x.toFixed(2)}, y=${event.y.toFixed(2)} (absolute component coords)`); // Ensure this is active
     })
     .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
       // console.log('Gesture Update event raw:', event); // Simplest log to check if onUpdate is firing
@@ -111,22 +243,22 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
         touchX.value = event.x;
         const currentX = event.x;
 
-        console.log(`Gesture Update: currentX=${currentX.toFixed(2)}`); // More specific log
+        //console.log(`Gesture Update: currentX=${currentX.toFixed(2)}`); // More specific log
 
-        if (currentX !== null && xStep > 0 && plotDates.length > 0) {
+        if (currentX !== null && displayXStep > 0 && displayPlotDates.length > 0) {
           const chartRelativeX = currentX - CHART_PADDING;
-          let selectedIndex = Math.round(chartRelativeX / xStep);
-          selectedIndex = Math.max(0, Math.min(plotDates.length - 1, selectedIndex));
+          let selectedIndex = Math.round(chartRelativeX / displayXStep);
+          selectedIndex = Math.max(0, Math.min(displayPlotDates.length - 1, selectedIndex));
 
           // console.log(`onUpdate: chartRelativeX=${chartRelativeX}, selectedIndex=${selectedIndex}`); // Debugging
-          console.log('Type of formatDateForCalloutLabel:', typeof formatDateForCalloutLabel, formatDateForCalloutLabel);
-          console.log('Value of date to be formatted:', plotDates[selectedIndex]);
+          // console.log('Type of formatDateForCalloutLabel:', typeof formatDateForCalloutLabel, formatDateForCalloutLabel);
+          //console.log('Value of date to be formatted:', displayPlotDates[selectedIndex]);
 
-          if (selectedIndex >= 0 && selectedIndex < plotDates.length) {
+          if (selectedIndex >= 0 && selectedIndex < displayPlotDates.length) {
             try {
-              const point = points[selectedIndex];
-              const dateStr = plotDates[selectedIndex]; 
-              const balance = plotBalances[selectedIndex];
+              const point = currentDisplayPoints[selectedIndex];
+              const dateStr = displayPlotDates[selectedIndex]; 
+              const balance = displayPlotBalances[selectedIndex];
               
               if (point === undefined || dateStr === undefined || balance === undefined) {
                 runOnJS(updateCalloutJS)(null);
@@ -160,10 +292,10 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
                 balance: balance,
                 isVisible: true,
               };
-              console.log('Data for callout state update:', JSON.stringify(dataForCallout));
+              //console.log('Data for callout state update:', JSON.stringify(dataForCallout));
               runOnJS(updateCalloutJS)(dataForCallout);
             } catch (e: any) {
-              console.error('Error processing data for callout:', e.message); // Ensure this logs if error occurs
+              //console.error('Error processing data for callout:', e.message); // Ensure this logs if error occurs
               runOnJS(updateCalloutJS)(null);
             }
           } else {
@@ -180,12 +312,6 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
     })
     .minDistance(1)
     .shouldCancelWhenOutside(false); // Keep tracking even if finger slides out briefly
-
-  const minLabel = formatCurrency(minBalance);
-  const maxLabel = formatCurrency(maxBalance);
-  // Axis labels will now call the restored function
-  const firstDateLabel = plotDates.length > 0 && plotDates[0] ? formatDateForCalloutLabel(plotDates[0]) : ""; 
-  const lastDateLabel = plotDates.length > 0 && plotDates[plotDates.length - 1] ? formatDateForCalloutLabel(plotDates[plotDates.length - 1]) : "";
 
   return (
     <GestureDetector gesture={panGesture}>
@@ -214,16 +340,18 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
         {/* Chart Canvas with guide lines and vertical line */}
         <Canvas style={{ width: windowWidth, height: CANVAS_HEIGHT }}>
           {/* Top guide line */}
-          <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - CHART_PADDING, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
+          <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - 100, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
           {/* Bottom guide line */}
-          <Line p1={{ x: CHART_PADDING, y: yBottom }} p2={{ x: windowWidth - CHART_PADDING, y: yBottom }} color="#666" strokeWidth={1} style="stroke" />
-          {/* Chart line */}
-          <Path
-            path={pathString}
+          <Line p1={{ x: CHART_PADDING, y: yBottom }} p2={{ x: windowWidth - 100, y: yBottom }} color="#666" strokeWidth={1} style="stroke" />
+          {/* Chart line - now uses animatedSkPath */}
+          <SkiaPath
+            path={animatedSkPath}
             color="lightblue"
             style="stroke"
             strokeWidth={3}
-          />
+          >
+            <CornerPathEffect r={25} />
+          </SkiaPath>
           {/* Vertical line from callout to chart point */}
           {calloutData?.isVisible && (
             <Line
@@ -237,16 +365,16 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
           )}
         </Canvas>
         {/* Max label (top right) */}
-        <Text style={[styles.axisLabel, styles.maxLabel, { top: yTop - 8, right: CHART_PADDING }]}>{maxLabel}</Text>
+        <Text style={[styles.axisLabel, styles.maxLabel, { top: yTop - 8, right: CHART_PADDING }]}>{finalMaxLabel}</Text>
         {/* Min label (bottom right, in-line with bottom guide) */}
-        <Text style={[styles.axisLabel, styles.minLabel, { top: yBottom - 8, right: CHART_PADDING }]}>{minLabel}</Text>
+        <Text style={[styles.axisLabel, styles.minLabel, { top: yBottom - 8, right: CHART_PADDING }]}>{finalMinLabel}</Text>
         {/* X-axis labels */}
         <View style={[styles.xAxisLabels, { marginTop: 4 }]}>
-          <Text style={styles.axisLabel}>{firstDateLabel}</Text>
+          <Text style={styles.axisLabel}>{finalFirstDateLabel}</Text>
           <View style={{ flex: 1 }} />
-          <Text style={styles.axisLabel}>{lastDateLabel}</Text>
+          <Text style={styles.axisLabel}>{finalLastDateLabel}</Text>
         </View>
-        {isEmptyState && (
+        {displayIsEmptyState && (
           <Text style={styles.placeholderText}>No savings data to display.</Text>
         )}
       </View>
