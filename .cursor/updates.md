@@ -188,3 +188,9 @@ alwaysApply: false
 - Rendered the line path using the actual aggregated balance data.
 - Updated `Dashboard` to pass `balanceSummary` to the chart.
 - Chart now displays the user's real savings trend over time.
+
+## May 16, 2024 - Enhancement: Chart Axis Labels
+
+- Added Y-axis labels for min and max balance (always shows at least $0 and the highest balance).
+- Added X-axis labels for the first and last date in the data.
+- Labels styled for dark theme and positioned around the Skia canvas for clarity.
