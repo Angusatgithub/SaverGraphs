@@ -1,21 +1,20 @@
 # SaverGraphs
 
-A React Native mobile app that visualizes your Up Bank savings through beautiful, interactive graphs. Track your savings progress across multiple accounts with customizable views and timeframes.
+Use your UP API to track your savings progress across multiple Savers with a sweet interactive graph.
 
-## Features (In Development)
+## Stuff you can do
 
-- 📊 Interactive savings balance visualization
-- 🔐 Secure Up API integration
-- 📱 Dark mode optimized interface
+- 📊 Scrub the graph
+- 🔐 Secure Up API integration (yes for real)
 - 📅 Multiple timeframe views (Weekly, Monthly, Yearly)
 - 🏦 Multi-account aggregation and filtering
 
 ## Tech Stack
 
-- React Native with Expo
-- TypeScript
-- React Native Skia (for graphs)
-- Expo Router (for navigation)
+- React Native with Expo (~53.0.9)
+- TypeScript (~5.8.3)
+- React Native Skia (^2.0.0)
+- Expo Router (~5.0.6)
 - Up Bank API
 
 ## Development Setup
@@ -33,19 +32,7 @@ npm install
 
 3. Start the development server:
 ```bash
-npm start
-```
-
-4. Run on your preferred platform:
-```bash
-# iOS
-npm run ios
-
-# Android
-npm run android
-
-# Web
-npm run web
+npx expo start
 ```
 
 ## Environment Setup
@@ -55,12 +42,5 @@ You'll need:
 - Expo CLI
 - iOS Simulator (for iOS development)
 - Android Studio (for Android development)
+- or instead of either of the above, just install Expo Go on your phone.
 - An Up Bank API key (get one from https://api.up.com.au/)
-
-## Contributing
-
-This project is currently in early development. Feel free to open issues for bugs or feature requests.
-
-## License
-
-MIT License - See LICENSE file for details
