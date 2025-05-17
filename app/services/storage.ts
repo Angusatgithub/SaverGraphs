@@ -78,4 +78,16 @@ export async function clearStoredTimeframe(): Promise<void> {
   } catch (e) {
     console.error('Failed to clear timeframe', e);
   }
+}
+
+export async function clearAllData(): Promise<void> {
+  try {
+    await Promise.all([
+      clearApiKey(),
+      clearSelectedAccountIds(),
+      clearStoredTimeframe()
+    ]);
+  } catch (e) {
+    console.error('Failed to clear all data', e);
+  }
 } 

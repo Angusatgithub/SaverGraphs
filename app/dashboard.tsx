@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import AccountSelector from '../components/AccountSelector';
 import BalanceChart from '../components/BalanceChart';
 import DashboardHeader from '../components/DashboardHeader';
 import SummaryDisplay from '../components/SummaryDisplay';
+import ThemedText from '../components/ThemedText';
 import TimeframeSelectionModal, { Timeframe } from '../components/TimeframeSelectionModal';
+import { clearAllData } from './services/storage';
 import { UpAccount } from './services/upApi';
 
 interface DashboardProps {
@@ -21,6 +23,7 @@ interface DashboardProps {
   onPreviousPeriod: () => void;
   onNextPeriod: () => void;
   filteredTransactionCount: number;
+  onLogout: () => void;
 }
 
 export default function Dashboard({ 
@@ -36,7 +39,8 @@ export default function Dashboard({
   currentPeriodReferenceDate,
   onPreviousPeriod,
   onNextPeriod,
-  filteredTransactionCount
+  filteredTransactionCount,
+  onLogout
 }: DashboardProps) {
   const totalAccounts = accounts.length;
   const [isTimeframeModalVisible, setIsTimeframeModalVisible] = useState(false);
@@ -90,6 +94,11 @@ export default function Dashboard({
     onAccountSelectionChange(newSelected);
   };
 
+  const handleLogout = async () => {
+    await clearAllData();
+    onLogout();
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <DashboardHeader 
@@ -98,7 +107,9 @@ export default function Dashboard({
         onRefresh={onRefreshData}
       />
 
-      <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} isLoading={isLoading} />
+      <View style={styles.chartContainer}>
+        <BalanceChart dates={balanceSummary.dates} balances={balanceSummary.balances} isLoading={isLoading} />
+      </View>
 
       <SummaryDisplay
         totalSelectedAccounts={totalSelectedAccounts}
@@ -125,6 +136,14 @@ export default function Dashboard({
         currentTimeframe={currentTimeframe}
         onTimeframeSelect={onTimeframeChange}
       />
+
+      <TouchableOpacity 
+        style={styles.logoutButton} 
+        onPress={handleLogout}
+        accessibilityLabel="Log out"
+      >
+        <ThemedText style={styles.logoutButtonText}>Log out</ThemedText>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -137,6 +156,9 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: 20,
+  },
+  chartContainer: {
+    marginBottom: 32,
   },
   actionButtonsContainer: {
     flexDirection: 'row',
@@ -155,6 +177,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#5856D6',
   },
   buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    backgroundColor: '#FF3B30',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 20,
+    marginBottom: 40,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

@@ -208,6 +208,7 @@ export default function App() {
   };
 
   const handlePreviousPeriod = () => {
+    setSuccess(''); // Clear any existing success message
     const newRefDate = new Date(currentPeriodReferenceDate);
     switch (currentTimeframe) {
       case 'Weekly':
@@ -224,6 +225,7 @@ export default function App() {
   };
 
   const handleNextPeriod = () => {
+    setSuccess(''); // Clear any existing success message
     const newRefDate = new Date(currentPeriodReferenceDate);
     switch (currentTimeframe) {
       case 'Weekly':
@@ -259,6 +261,17 @@ export default function App() {
   // After success animation, show dashboard if accounts are loaded
   const handleSuccessComplete = () => {
     // No navigation, just show dashboard in place
+  };
+
+  const handleLogout = () => {
+    setApiKey(null);
+    setAccounts(null);
+    setAllTransactions({});
+    setTransactionSummary({});
+    setBalanceSummary({ dates: [], balances: [] });
+    setSelectedAccountIdsForChart([]);
+    setCurrentTimeframe('Monthly');
+    setCurrentPeriodReferenceDate(new Date());
   };
 
   // Helper to filter transactions by timeframe
@@ -301,8 +314,10 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <ErrorMessage message={error} />
-      <SuccessMessage message={success} onComplete={handleSuccessComplete} />
+      <View style={styles.messageContainer}>
+        <ErrorMessage message={error} />
+        <SuccessMessage message={success} onComplete={handleSuccessComplete} />
+      </View>
       {accounts ? (
         <Dashboard 
           accounts={accounts} 
@@ -314,10 +329,11 @@ export default function App() {
           onRefreshData={handleRefreshData}
           currentTimeframe={currentTimeframe}
           onTimeframeChange={handleTimeframeChange}
-          currentPeriodReferenceDate={currentPeriodReferenceDate} // Pass new prop
-          onPreviousPeriod={handlePreviousPeriod} // Pass new prop
-          onNextPeriod={handleNextPeriod} // Pass new prop
-          filteredTransactionCount={filteredTransactionCount} // <-- Add this prop
+          currentPeriodReferenceDate={currentPeriodReferenceDate}
+          onPreviousPeriod={handlePreviousPeriod}
+          onNextPeriod={handleNextPeriod}
+          filteredTransactionCount={filteredTransactionCount}
+          onLogout={handleLogout}
         />
       ) : (
         !isLoading && <ApiKeyInput onSubmit={handleApiKeySubmit} isLoading={isLoading} />
@@ -334,6 +350,15 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     justifyContent: 'flex-start',
     paddingTop: 50,
+  },
+  messageContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
 });
 

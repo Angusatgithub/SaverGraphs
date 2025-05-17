@@ -2,7 +2,7 @@ import { Canvas, CornerPathEffect, Line, Skia, Path as SkiaPath } from '@shopify
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector, GestureUpdateEvent, PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
-import { runOnJS, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
+import { runOnJS, useDerivedValue, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 interface Point { x: number; y: number; }
 
@@ -20,6 +20,7 @@ const CALLOUT_HEIGHT = 60;
 const CALLOUT_TOP_PADDING = 8;
 const CHART_TOP_OFFSET = CALLOUT_HEIGHT + CALLOUT_TOP_PADDING;
 const CANVAS_HEIGHT = CHART_HEIGHT + CHART_PADDING * 2 + CHART_TOP_OFFSET;
+const LOADING_ANIMATION_DURATION = 2000; // 2 seconds per cycle
 
 const formatCurrency = (value: number): string => {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -60,9 +61,14 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   const [calloutData, setCalloutData] = useState<CalloutData | null>(null);
 
   // Animation shared values
-  const previousPointsSV = useSharedValue<Point[]>([]);
-  const currentPointsSV = useSharedValue<Point[]>([]);
+  const previousPoints = useSharedValue<Point[]>([]);
+  const currentPoints = useSharedValue<Point[]>([]);
   const animationProgress = useSharedValue(0);
+
+  // Add loading animation shared value
+  const loadingAnimationProgress = useSharedValue(0);
+  const loadingToDataTransition = useSharedValue(0);
+  const dataTransitionProgress = useSharedValue(1); // New shared value for data transitions
 
   const yTop = CHART_TOP_OFFSET + CHART_PADDING;
   const yBottom = CHART_TOP_OFFSET + CHART_HEIGHT + CHART_PADDING - CHART_BOTTOM_PADDING;
@@ -78,9 +84,9 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
     let currentIsEmptyState = false;
 
     if (isLoading) {
-      const oldPoints = [...currentPointsSV.value];
-      previousPointsSV.value = oldPoints;
-      currentPointsSV.value = []; // Target empty state
+      const oldPoints = [...currentPoints.value];
+      previousPoints.value = oldPoints;
+      currentPoints.value = []; // Target empty state
       animationProgress.value = 0;
       animationProgress.value = withTiming(1, { duration: 300 });
       return;
@@ -106,14 +112,14 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
       y: yTop + (1 - (bal - currentMinBalance) / currentYRange) * (yBottom - yTop),
     }));
 
-    const oldCurrentPoints = [...currentPointsSV.value];
-    currentPointsSV.value = [...newCalculatedPoints];
+    const oldCurrentPoints = [...currentPoints.value];
+    currentPoints.value = [...newCalculatedPoints];
 
     if (oldCurrentPoints.length === 0 && newCalculatedPoints.length > 0) {
       // First data load after being empty, animate from bottom
-      previousPointsSV.value = newCalculatedPoints.map(p => ({ x: p.x, y: yBottom }));
+      previousPoints.value = newCalculatedPoints.map(p => ({ x: p.x, y: yBottom }));
     } else {
-      previousPointsSV.value = oldCurrentPoints;
+      previousPoints.value = oldCurrentPoints;
     }
     
     animationProgress.value = 0;
@@ -121,63 +127,184 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
 
   }, [dates, balances, isLoading, chartWidth, yTop, yBottom, CHART_PADDING, windowWidth]);
 
+  // Modify loading animation effect
+  useEffect(() => {
+    if (isLoading) {
+      loadingAnimationProgress.value = 0;
+      loadingAnimationProgress.value = withRepeat(
+        withTiming(1, { duration: LOADING_ANIMATION_DURATION }),
+        -1, // Infinite repeat
+        false // Reverse
+      );
+      loadingToDataTransition.value = 0;
+      dataTransitionProgress.value = 1;
+    } else {
+      // When loading completes, animate to the actual data
+      loadingAnimationProgress.value = withTiming(0, { duration: 300 });
+      loadingToDataTransition.value = withTiming(1, { duration: 500 });
+    }
+  }, [isLoading]);
+
+  // Add loading animation path
+  const loadingPath = useDerivedValue(() => {
+    const progress = loadingAnimationProgress.value;
+    const path = Skia.Path.Make();
+    const numPoints = 20;
+    const xStep = chartWidth / (numPoints - 1);
+    const amplitude = 20; // Height of the wiggle
+
+    path.moveTo(CHART_PADDING, yTop + (yBottom - yTop) / 2);
+
+    for (let i = 1; i < numPoints; i++) {
+      const x = CHART_PADDING + i * xStep;
+      const y = yTop + (yBottom - yTop) / 2 + 
+        Math.sin((i / numPoints) * Math.PI * 2 + progress * Math.PI * 2) * amplitude;
+      path.lineTo(x, y);
+    }
+
+    return path;
+  }, [chartWidth, yTop, yBottom, CHART_PADDING]);
+
+  // Modify the main path animation to include both loading and data transitions
   const animatedSkPath = useDerivedValue(() => {
-    const progress = animationProgress.value;
-    const prevPoints = previousPointsSV.value;
-    const currPoints = currentPointsSV.value;
+    const transition = loadingToDataTransition.value;
     
-    const emptyPathDefaultString = `M ${CHART_PADDING} ${yBottom} L ${windowWidth - CHART_PADDING} ${yBottom}`;
-    const emptySkPath = Skia.Path.MakeFromSVGString(emptyPathDefaultString) || Skia.Path.Make();
+    // If we're still loading, show the loading animation
+    if (transition === 0) {
+      return loadingPath.value;
+    }
 
-    if (currPoints.length === 0) { // Target state is empty
-      if (prevPoints.length === 0 || progress === 1) { // Already empty or animation to empty finished
-        return emptySkPath;
+    // Calculate the actual data points
+    let effectivePlotDates = dates;
+    let effectivePlotBalances = balances;
+    let currentIsEmptyState = false;
+
+    if (!dates.length || !balances.length) {
+      currentIsEmptyState = true;
+      const today = new Date().toISOString().slice(0, 10);
+      effectivePlotDates = [today, today];
+      effectivePlotBalances = [0, 0];
+    }
+
+    const currentMinBalance = currentIsEmptyState ? 0 : Math.min(...effectivePlotBalances);
+    const currentMaxBalance = currentIsEmptyState ? 0 : Math.max(...effectivePlotBalances);
+    let currentYRange = currentMaxBalance - currentMinBalance;
+    if (currentYRange === 0) {
+      currentYRange = currentIsEmptyState ? 1 : (currentMaxBalance === 0 ? 1 : Math.abs(currentMaxBalance * 0.1) || 1);
+    }
+    const currentXStep = effectivePlotDates.length > 1 ? chartWidth / (effectivePlotDates.length - 1) : chartWidth;
+
+    const newCalculatedPoints: Point[] = effectivePlotBalances.map((bal, i) => ({
+      x: CHART_PADDING + i * currentXStep,
+      y: yTop + (1 - (bal - currentMinBalance) / currentYRange) * (yBottom - yTop),
+    }));
+
+    // Create the actual data path
+    const dataPath = Skia.Path.Make();
+    if (newCalculatedPoints.length > 0) {
+      dataPath.moveTo(newCalculatedPoints[0].x, newCalculatedPoints[0].y);
+      for (let i = 1; i < newCalculatedPoints.length; i++) {
+        dataPath.lineTo(newCalculatedPoints[i].x, newCalculatedPoints[i].y);
       }
-      // Animating from prevPoints to empty (all points to yBottom)
-      const pointsToEmpty = prevPoints.map(p => ({
-        x: p.x,
-        y: p.y + (yBottom - p.y) * progress,
-      }));
-      if (pointsToEmpty.length === 0) return emptySkPath;
-      const pathStrToEmpty = `M ${pointsToEmpty[0].x} ${pointsToEmpty[0].y}${pointsToEmpty.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}`;
-      return Skia.Path.MakeFromSVGString(pathStrToEmpty) || Skia.Path.Make();
     }
 
-    let effectivePrevPoints = prevPoints;
-    if (prevPoints.length === 0 && currPoints.length > 0) { // Initial animation from baseline
-      effectivePrevPoints = currPoints.map(p => ({ x: p.x, y: yBottom }));
-    }
-    
-    // Simplified: if point counts differ (and not initial anim), animate current path from bottom.
-    // This avoids complex morphing logic for differing point counts in this example.
-    if (effectivePrevPoints.length > 0 && effectivePrevPoints.length !== currPoints.length) {
-      const pointsAnimatingIn = currPoints.map(cp => ({
-        x: cp.x, // X positions are target
-        y: yBottom + (cp.y - yBottom) * progress, // Y animates from bottom
-      }));
-      if (pointsAnimatingIn.length === 0) return emptySkPath;
-      const pathStrIn = `M ${pointsAnimatingIn[0].x} ${pointsAnimatingIn[0].y}${pointsAnimatingIn.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}`;
-      return Skia.Path.MakeFromSVGString(pathStrIn) || Skia.Path.Make();
+    // If we're in loading transition, interpolate between loading and data paths
+    if (transition < 1) {
+      // Create loading points array
+      const numLoadingPoints = 20;
+      const loadingPoints: Point[] = [];
+      const xStep = chartWidth / (numLoadingPoints - 1);
+      const amplitude = 20;
+
+      for (let i = 0; i < numLoadingPoints; i++) {
+        const x = CHART_PADDING + i * xStep;
+        const y = yTop + (yBottom - yTop) / 2 + 
+          Math.sin((i / numLoadingPoints) * Math.PI * 2 + loadingAnimationProgress.value * Math.PI * 2) * amplitude;
+        loadingPoints.push({ x, y });
+      }
+
+      // Create interpolated path
+      const interpolatedPath = Skia.Path.Make();
+      const numPoints = Math.max(loadingPoints.length, newCalculatedPoints.length);
+      
+      for (let i = 0; i < numPoints; i++) {
+        const loadingPoint = loadingPoints[i] || loadingPoints[loadingPoints.length - 1];
+        const dataPoint = newCalculatedPoints[i] || newCalculatedPoints[newCalculatedPoints.length - 1];
+        
+        const x = loadingPoint.x + (dataPoint.x - loadingPoint.x) * transition;
+        const y = loadingPoint.y + (dataPoint.y - loadingPoint.y) * transition;
+        
+        if (i === 0) {
+          interpolatedPath.moveTo(x, y);
+        } else {
+          interpolatedPath.lineTo(x, y);
+        }
+      }
+      
+      return interpolatedPath;
     }
 
-    // Morphing (assuming same number of points or initial animation setup)
-    const interpolatedPoints: Point[] = [];
-    const len = currPoints.length;
-    if (len === 0) return emptySkPath; // Should be caught by currPoints.length === 0
+    // If we're in data transition (between time frames)
+    if (dataTransitionProgress.value < 1) {
+      const interpolatedPath = Skia.Path.Make();
+      const prevPoints = previousPoints.value;
+      const currPoints = newCalculatedPoints;
+      const progress = dataTransitionProgress.value;
 
-    for (let i = 0; i < len; i++) {
-      const prevP = (effectivePrevPoints[i] || { x: currPoints[i].x, y: yBottom }); // Fallback for safety
-      const currP = currPoints[i];
-      interpolatedPoints.push({
-        x: prevP.x + (currP.x - prevP.x) * progress,
-        y: prevP.y + (currP.y - currP.y) * progress,
-      });
+      // Use the maximum number of points between previous and current
+      const numPoints = Math.max(prevPoints.length, currPoints.length);
+
+      for (let i = 0; i < numPoints; i++) {
+        const prevPoint = prevPoints[i] || prevPoints[prevPoints.length - 1];
+        const currPoint = currPoints[i] || currPoints[currPoints.length - 1];
+
+        const x = prevPoint.x + (currPoint.x - prevPoint.x) * progress;
+        const y = prevPoint.y + (currPoint.y - prevPoint.y) * progress;
+
+        if (i === 0) {
+          interpolatedPath.moveTo(x, y);
+        } else {
+          interpolatedPath.lineTo(x, y);
+        }
+      }
+
+      return interpolatedPath;
     }
 
-    if (interpolatedPoints.length === 0) return emptySkPath;
-    const pathStr = `M ${interpolatedPoints[0].x} ${interpolatedPoints[0].y}${interpolatedPoints.slice(1).map(p => ` L ${p.x} ${p.y}`).join('')}`;
-    return Skia.Path.MakeFromSVGString(pathStr) || Skia.Path.Make();
-  }, [CHART_PADDING, yBottom, windowWidth]); // External scope values used in derived value
+    return dataPath;
+  }, [dates, balances, chartWidth, yTop, yBottom, CHART_PADDING, loadingAnimationProgress.value, dataTransitionProgress.value]);
+
+  // Add effect to handle data transitions
+  useEffect(() => {
+    if (isLoading) {
+      loadingAnimationProgress.value = 0;
+      loadingAnimationProgress.value = withRepeat(
+        withTiming(1, { duration: LOADING_ANIMATION_DURATION }),
+        -1,
+        false
+      );
+      loadingToDataTransition.value = 0;
+      dataTransitionProgress.value = 1;
+    } else {
+      // Store current points before updating
+      const currentPoints = animatedSkPath.value ? 
+        Array.from({ length: 20 }, (_, i) => {
+          const x = CHART_PADDING + (i * chartWidth) / 19;
+          const y = yTop + (yBottom - yTop) / 2;
+          return { x, y };
+        }) : [];
+      
+      previousPoints.value = currentPoints;
+      
+      // Start transition animation
+      dataTransitionProgress.value = 0;
+      dataTransitionProgress.value = withTiming(1, { duration: 500 });
+      
+      // Handle loading to data transition
+      loadingAnimationProgress.value = withTiming(0, { duration: 300 });
+      loadingToDataTransition.value = withTiming(1, { duration: 500 });
+    }
+  }, [dates, balances, isLoading, chartWidth, yTop, yBottom, CHART_PADDING]);
 
   // The rest of the component logic that depends on current (non-animated) data for labels, callouts etc.
   // needs to use the most recent props (dates, balances) or derived values from them, not animated state.
@@ -191,8 +318,25 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
   if (isLoading) {
     // Return loading placeholder directly, animation logic is for when not loading
     return (
-      <View style={[styles.container, styles.placeholderContainer]}>
-        <Text style={styles.placeholderText}>Loading savings data...</Text>
+      <View style={[styles.container, { height: CANVAS_HEIGHT }]}>
+        <Canvas style={{ width: windowWidth, height: CANVAS_HEIGHT }}>
+          {/* Top guide line */}
+          <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - CHART_PADDING, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
+          {/* Bottom guide line */}
+          <Line p1={{ x: CHART_PADDING, y: yBottom }} p2={{ x: windowWidth - CHART_PADDING, y: yBottom }} color="#666" strokeWidth={1} style="stroke" />
+          {/* Loading animation line */}
+          <SkiaPath
+            path={loadingPath}
+            color="lightblue"
+            style="stroke"
+            strokeWidth={3}
+          >
+            <CornerPathEffect r={25} />
+          </SkiaPath>
+        </Canvas>
+        <Text style={[styles.placeholderText, { position: 'absolute', bottom: CHART_PADDING * 4 }]}>
+          Loading...this can take a while
+        </Text>
       </View>
     );
   }
@@ -315,8 +459,8 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
 
   return (
     <GestureDetector gesture={panGesture}>
-      <View style={styles.container}>
-        {/* Callout View at top, now inside the canvas area */}
+      <View style={[styles.container, { height: CANVAS_HEIGHT }]}>
+        {/* Callout View at top */}
         {calloutData?.isVisible && (
           <View
             style={[
@@ -343,7 +487,7 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
           <Line p1={{ x: CHART_PADDING, y: yTop }} p2={{ x: windowWidth - 100, y: yTop }} color="#666" strokeWidth={1} style="stroke" />
           {/* Bottom guide line */}
           <Line p1={{ x: CHART_PADDING, y: yBottom }} p2={{ x: windowWidth - 100, y: yBottom }} color="#666" strokeWidth={1} style="stroke" />
-          {/* Chart line - now uses animatedSkPath */}
+          {/* Chart line - now uses animatedSkPath which includes loading state */}
           <SkiaPath
             path={animatedSkPath}
             color="lightblue"
@@ -375,7 +519,9 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
           <Text style={styles.axisLabel}>{finalLastDateLabel}</Text>
         </View>
         {displayIsEmptyState && (
-          <Text style={styles.placeholderText}>No savings data to display.</Text>
+          <Text style={[styles.placeholderText, { position: 'absolute', bottom: CHART_PADDING }]}>
+            No savings data to display.
+          </Text>
         )}
       </View>
     </GestureDetector>
@@ -385,12 +531,12 @@ export default function BalanceChart({ dates, balances, isLoading }: BalanceChar
 const styles = StyleSheet.create({
   container: {
     marginTop: 20,
-    marginBottom: 20, // Adjusted from 32 for placeholder text
+    marginBottom: 20,
     alignItems: 'center',
     width: '100%',
+    position: 'relative', // Add this to ensure absolute positioning works correctly
   },
   placeholderContainer: {
-    height: CHART_HEIGHT + CHART_PADDING * 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -399,7 +545,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginBottom: CHART_HEIGHT / 2, // Position it roughly in the middle of where chart would be
   },
   maxLabel: {
     position: 'absolute',
