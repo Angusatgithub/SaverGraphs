@@ -5,9 +5,9 @@ Use your UP API to track your savings progress across multiple Savers with a swe
 ## Stuff you can do
 
 - 📊 Scrub the graph
-- 🔐 Secure Up API integration (yes for real)
-- 📅 Multiple timeframe views (Weekly, Monthly, Yearly)
-- 🏦 Multi-account aggregation and filtering
+- 📅 View historical savings in a bunch of time frames (Weekly, Monthly, Yearly)
+- 🏦 Saver aggregation and filtering
+- 🔐 Secure Up API integration (On device storage, no internet stuff)
 
 ## Tech Stack
 
@@ -17,23 +17,27 @@ Use your UP API to track your savings progress across multiple Savers with a swe
 - Expo Router (~5.0.6)
 - Up Bank API
 
-## Development Setup
+## If you want to use it
 
-1. Clone the repository:
+1. Download the Expo Go app on your phone
+
+2. Clone the repository:
 ```bash
 git clone https://github.com/Angusatgithub/SaverGraphs.git
 cd SaverGraphs
 ```
 
-2. Install dependencies:
+3. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Start the development server:
+4. Start the development server:
 ```bash
 npx expo start
 ```
+
+5. Scan the QR code with Expo Go
 
 ## Environment Setup
 
